@@ -1,6 +1,8 @@
 import React, { createContext, useState, useContext, useEffect } from "react";
 import axios from "axios";
 
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+
 const AuthContext = createContext(null);
 
 export const useAuth = () => {
@@ -32,7 +34,7 @@ export const AuthProvider = ({ children }) => {
     const loadUser = async () => {
       if (token) {
         try {
-          const response = await axios.get("http://localhost:5001/api/auth/me");
+          const response = await axios.get(`${API_URL}/auth/me`);
           setUser(response.data.data);
         } catch (error) {
           console.error("Error loading user:", error);
@@ -49,10 +51,10 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const response = await axios.post(
-        "http://localhost:5001/api/auth/login",
-        { email, password },
-      );
+      const response = await axios.post(`${API_URL}/auth/login`, {
+        email,
+        password,
+      });
 
       const { user, token } = response.data.data;
       setUser(user);
@@ -69,10 +71,13 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (name, email, password, role, phone) => {
     try {
-      const response = await axios.post(
-        "http://localhost:5001/api/auth/register",
-        { name, email, password, role, phone },
-      );
+      const response = await axios.post(`${API_URL}/auth/register`, {
+        name,
+        email,
+        password,
+        role,
+        phone,
+      });
 
       const { user, token } = response.data.data;
       setUser(user);
@@ -91,7 +96,7 @@ export const AuthProvider = ({ children }) => {
     try {
       // Call backend logout endpoint to blacklist token
       if (token) {
-        await axios.post("http://localhost:5001/api/auth/logout");
+        await axios.post(`${API_URL}/auth/logout`);
       }
     } catch (error) {
       console.error("Logout error:", error);
@@ -107,7 +112,7 @@ export const AuthProvider = ({ children }) => {
     try {
       // Logout from all devices
       if (token) {
-        await axios.post("http://localhost:5001/api/auth/logout-all");
+        await axios.post(`${API_URL}/auth/logout-all`);
       }
     } catch (error) {
       console.error("Logout all error:", error);
