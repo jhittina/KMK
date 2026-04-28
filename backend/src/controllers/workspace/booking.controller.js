@@ -2,6 +2,10 @@ const Booking = require("../../models/Booking.model");
 const Package = require("../../models/Package.model");
 const Customer = require("../../models/Customer.model");
 const { calculateBookingPrice } = require("../../services/pricing.service");
+const {
+  sendInternalNotification,
+  sendCustomerNotification,
+} = require("../../services/email.service");
 
 /**
  * Get all bookings
@@ -458,7 +462,7 @@ exports.updateBooking = async (req, res) => {
  */
 exports.updateBookingStatus = async (req, res) => {
   try {
-    const { status } = req.body;
+    const { status, notifyCustomer } = req.body;
 
     if (!status) {
       return res.status(400).json({
@@ -467,17 +471,27 @@ exports.updateBookingStatus = async (req, res) => {
       });
     }
 
-    const booking = await Booking.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true, runValidators: true },
+    // Fetch current booking first so we know the previous status
+    const existing = await Booking.findById(req.params.id).populate(
+      "packages.packageId",
     );
-
-    if (!booking) {
+    if (!existing) {
       return res.status(404).json({
         success: false,
         error: "Booking not found",
       });
+    }
+
+    const previousStatus = existing.status;
+    existing.status = status;
+    const booking = await existing.save({ runValidators: true });
+
+    // Always send internal team notification
+    sendInternalNotification(booking, status, previousStatus).catch(() => {});
+
+    // Send customer notification only if explicitly requested
+    if (notifyCustomer) {
+      sendCustomerNotification(booking, status).catch(() => {});
     }
 
     res.json({

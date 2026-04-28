@@ -69,6 +69,14 @@ const MONTH_NAMES = [
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_NAMES_SHORT = ["S", "M", "T", "W", "T", "F", "S"];
 
+// Returns YYYY-MM-DD using local timezone (avoids UTC shift)
+const toLocalDateKey = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
 function BookingCalendar({ bookings = [], onBookingClick }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
@@ -89,7 +97,7 @@ function BookingCalendar({ bookings = [], onBookingClick }) {
     bookings.forEach((booking) => {
       const eventDate = booking.eventDetails?.eventDate;
       if (!eventDate) return;
-      const dateKey = new Date(eventDate).toISOString().split("T")[0];
+      const dateKey = toLocalDateKey(new Date(eventDate));
       if (!map[dateKey]) map[dateKey] = [];
       map[dateKey].push(booking);
     });
@@ -151,7 +159,7 @@ function BookingCalendar({ bookings = [], onBookingClick }) {
     };
     calendarDays.forEach(({ date, isCurrentMonth }) => {
       if (!isCurrentMonth) return;
-      const dateKey = date.toISOString().split("T")[0];
+      const dateKey = toLocalDateKey(date);
       const dayBookings = bookingsByDate[dateKey] || [];
       stats.total += dayBookings.length;
       dayBookings.forEach((b) => {
@@ -183,7 +191,7 @@ function BookingCalendar({ bookings = [], onBookingClick }) {
   }, [bookings, currentYear]);
 
   const today = new Date();
-  const todayKey = today.toISOString().split("T")[0];
+  const todayKey = toLocalDateKey(today);
 
   const goToPrevMonth = () =>
     setCurrentDate(new Date(currentYear, currentMonth - 1, 1));
@@ -201,7 +209,7 @@ function BookingCalendar({ bookings = [], onBookingClick }) {
   };
 
   const handleDayClick = (dayData) => {
-    const dateKey = dayData.date.toISOString().split("T")[0];
+    const dateKey = toLocalDateKey(dayData.date);
     const dayBookings = bookingsByDate[dateKey] || [];
     if (dayBookings.length > 0) {
       setSelectedDate({ date: dayData.date, bookings: dayBookings });
@@ -693,7 +701,7 @@ function BookingCalendar({ bookings = [], onBookingClick }) {
             }}
           >
             {calendarDays.map((dayData, index) => {
-              const dateKey = dayData.date.toISOString().split("T")[0];
+              const dateKey = toLocalDateKey(dayData.date);
               const dayBookings = bookingsByDate[dateKey] || [];
               const isToday = dateKey === todayKey;
               const hasEvents = dayBookings.length > 0;

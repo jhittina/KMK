@@ -22,6 +22,8 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  FormControlLabel,
+  Checkbox,
 } from "@mui/material";
 import {
   ArrowBack as ArrowBackIcon,
@@ -56,6 +58,7 @@ function BookingDetails() {
   const [transactionId, setTransactionId] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
   const [finalPrice, setFinalPrice] = useState("");
+  const [notifyCustomer, setNotifyCustomer] = useState(true);
 
   const { data, isLoading, error, refetch } = useBooking(id);
   const updateBookingMutation = useUpdateBooking();
@@ -116,7 +119,11 @@ function BookingDetails() {
     }
 
     try {
-      await updateStatusMutation.mutateAsync({ id, status: newStatus });
+      await updateStatusMutation.mutateAsync({
+        id,
+        status: newStatus,
+        notifyCustomer,
+      });
       showSuccess("Booking status updated successfully");
       // No need for manual refetch - cache invalidation handles it
     } catch (error) {
@@ -214,14 +221,16 @@ function BookingDetails() {
         >
           Back to Bookings
         </Button>
-        <Button
-          variant="outlined"
-          startIcon={<EditIcon />}
-          onClick={() => navigate(`/workspace/bookings/${id}/edit`)}
-          color="primary"
-        >
-          Edit Booking
-        </Button>
+        {booking.status === "draft" && (
+          <Button
+            variant="outlined"
+            startIcon={<EditIcon />}
+            onClick={() => navigate(`/workspace/bookings/${id}/edit`)}
+            color="primary"
+          >
+            Edit Booking
+          </Button>
+        )}
         <Button
           variant="contained"
           startIcon={<DownloadIcon />}
@@ -888,13 +897,91 @@ function BookingDetails() {
                 value={booking.status}
                 label="Status"
                 onChange={(e) => handleStatusChange(e.target.value)}
+                disabled={
+                  booking.status === "completed" ||
+                  booking.status === "cancelled"
+                }
               >
-                <MenuItem value="draft">Draft</MenuItem>
-                <MenuItem value="confirmed">Confirmed</MenuItem>
-                <MenuItem value="completed">Completed</MenuItem>
-                <MenuItem value="cancelled">Cancelled</MenuItem>
+                {booking.status === "draft" && [
+                  <MenuItem key="draft" value="draft">
+                    Draft
+                  </MenuItem>,
+                  <MenuItem key="confirmed" value="confirmed">
+                    Confirmed
+                  </MenuItem>,
+                  <MenuItem key="cancelled" value="cancelled">
+                    Cancelled
+                  </MenuItem>,
+                ]}
+                {booking.status === "confirmed" && [
+                  <MenuItem key="confirmed" value="confirmed">
+                    Confirmed
+                  </MenuItem>,
+                  <MenuItem key="completed" value="completed">
+                    Completed
+                  </MenuItem>,
+                  <MenuItem key="cancelled" value="cancelled">
+                    Cancelled
+                  </MenuItem>,
+                ]}
+                {booking.status === "completed" && (
+                  <MenuItem value="completed">Completed</MenuItem>
+                )}
+                {booking.status === "cancelled" && (
+                  <MenuItem value="cancelled">Cancelled</MenuItem>
+                )}
               </Select>
             </FormControl>
+
+            {/* Notify customer toggle — shown when status can still change */}
+            {booking.status !== "completed" &&
+              booking.status !== "cancelled" && (
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={notifyCustomer}
+                      onChange={(e) => setNotifyCustomer(e.target.checked)}
+                      size="small"
+                      color="primary"
+                    />
+                  }
+                  label={
+                    <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                      Notify customer via email on status change
+                      {!booking.customer?.email && (
+                        <Typography
+                          component="span"
+                          variant="caption"
+                          color="error"
+                          sx={{ ml: 0.5 }}
+                        >
+                          (no email on file)
+                        </Typography>
+                      )}
+                    </Typography>
+                  }
+                  sx={{ mt: 1, display: "flex", alignItems: "center" }}
+                />
+              )}
+            {booking.status === "confirmed" && (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: "block", mt: 1 }}
+              >
+                ℹ Confirmed bookings can be marked as Completed or Cancelled.
+              </Typography>
+            )}
+            {(booking.status === "completed" ||
+              booking.status === "cancelled") && (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: "block", mt: 1 }}
+              >
+                ℹ This booking is {booking.status} and can no longer be changed.
+              </Typography>
+            )}
 
             <Box sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: "divider" }}>
               <Typography

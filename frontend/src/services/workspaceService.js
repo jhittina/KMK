@@ -18,8 +18,8 @@ export const bookingService = {
     api.get(`/workspace/bookings/number/${bookingNumber}`),
   create: (data) => api.post("/workspace/bookings", data),
   update: (id, data) => api.put(`/workspace/bookings/${id}`, data),
-  updateStatus: (id, status) =>
-    api.put(`/workspace/bookings/${id}/status`, { status }),
+  updateStatus: (id, status, notifyCustomer = false) =>
+    api.put(`/workspace/bookings/${id}/status`, { status, notifyCustomer }),
   recordPayment: (id, data) =>
     api.put(`/workspace/bookings/${id}/record-payment`, data),
   delete: (id) => api.delete(`/workspace/bookings/${id}`),

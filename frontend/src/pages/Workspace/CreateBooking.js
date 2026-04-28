@@ -329,21 +329,68 @@ function CreateBooking() {
                   </FormControl>
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="Venue"
-                    fullWidth
-                    required
-                    value={formData.eventDetails.venue}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        eventDetails: {
-                          ...formData.eventDetails,
-                          venue: e.target.value,
-                        },
-                      })
-                    }
-                  />
+                  <FormControl fullWidth required>
+                    <InputLabel>Venue</InputLabel>
+                    <Select
+                      label="Venue"
+                      value={
+                        [
+                          "Main Hall",
+                          "Haldi Hall",
+                          "Banquet Hall",
+                          "Banquet Hall without AC",
+                        ].includes(formData.eventDetails.venue)
+                          ? formData.eventDetails.venue
+                          : formData.eventDetails.venue
+                            ? "Other"
+                            : ""
+                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData({
+                          ...formData,
+                          eventDetails: {
+                            ...formData.eventDetails,
+                            venue: val === "Other" ? "" : val,
+                          },
+                        });
+                      }}
+                    >
+                      <MenuItem value="Main Hall">Main Hall</MenuItem>
+                      <MenuItem value="Haldi Hall">Haldi Hall</MenuItem>
+                      <MenuItem value="Banquet Hall">Banquet Hall</MenuItem>
+                      <MenuItem value="Banquet Hall without AC">
+                        Banquet Hall without AC
+                      </MenuItem>
+                      <MenuItem value="Other">Other (custom)</MenuItem>
+                    </Select>
+                  </FormControl>
+                  {/* Show custom input when Other is selected or existing value is custom */}
+                  {![
+                    "",
+                    "Main Hall",
+                    "Haldi Hall",
+                    "Banquet Hall",
+                    "Banquet Hall without AC",
+                  ].includes(formData.eventDetails.venue) ? (
+                    <TextField
+                      label="Custom Venue"
+                      fullWidth
+                      required
+                      sx={{ mt: 1 }}
+                      value={formData.eventDetails.venue}
+                      placeholder="Enter venue name"
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          eventDetails: {
+                            ...formData.eventDetails,
+                            venue: e.target.value,
+                          },
+                        })
+                      }
+                    />
+                  ) : null}
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <TextField

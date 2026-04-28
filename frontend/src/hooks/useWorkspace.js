@@ -77,8 +77,8 @@ export const useBookings = (params) => {
   return useQuery({
     queryKey: ["bookings", params],
     queryFn: () => bookingService.getAll(params),
-    staleTime: 3 * 60 * 1000, // 3 minutes - bookings update more frequently
-    gcTime: 10 * 60 * 1000, // 10 minutes cache
+    staleTime: 5 * 60 * 1000, // 5 minutes — only refetch on mount if older than this
+    gcTime: 10 * 60 * 1000,
   });
 };
 
@@ -97,7 +97,6 @@ export const useCreateBooking = () => {
   return useMutation({
     mutationFn: bookingService.create,
     onSuccess: () => {
-      // Force immediate refetch of active queries
       queryClient.refetchQueries({ queryKey: ["bookings"] });
       queryClient.refetchQueries({ queryKey: ["customers"] });
     },
@@ -109,14 +108,11 @@ export const useUpdateBooking = () => {
   return useMutation({
     mutationFn: ({ id, data }) => bookingService.update(id, data),
     onSuccess: (response, variables) => {
-      // Update the cache immediately with the response
       if (response?.data) {
         queryClient.setQueryData(["booking", variables.id], response);
       }
-
-      // Also invalidate to trigger refetch in other components
-      queryClient.invalidateQueries({ queryKey: ["bookings"] });
-      queryClient.invalidateQueries({ queryKey: ["booking", variables.id] });
+      // Force immediate refetch so calendar/list reflects the change right away
+      queryClient.refetchQueries({ queryKey: ["bookings"] });
     },
   });
 };
@@ -124,16 +120,14 @@ export const useUpdateBooking = () => {
 export const useUpdateBookingStatus = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, status }) => bookingService.updateStatus(id, status),
+    mutationFn: ({ id, status, notifyCustomer }) =>
+      bookingService.updateStatus(id, status, notifyCustomer),
     onSuccess: (response, variables) => {
-      // Update the cache immediately with the response
       if (response?.data) {
         queryClient.setQueryData(["booking", variables.id], response);
       }
-
-      // Also invalidate to trigger refetch in other components
-      queryClient.invalidateQueries({ queryKey: ["bookings"] });
-      queryClient.invalidateQueries({ queryKey: ["booking", variables.id] });
+      // Force immediate refetch so calendar/list reflects the change right away
+      queryClient.refetchQueries({ queryKey: ["bookings"] });
     },
   });
 };
@@ -144,14 +138,11 @@ export const useRecordBookingPayment = () => {
     mutationFn: ({ id, ...paymentData }) =>
       bookingService.recordPayment(id, paymentData),
     onSuccess: (response, variables) => {
-      // Update the cache immediately with the response
       if (response?.data) {
         queryClient.setQueryData(["booking", variables.id], response);
       }
-
-      // Also invalidate to trigger refetch in other components
-      queryClient.invalidateQueries({ queryKey: ["bookings"] });
-      queryClient.invalidateQueries({ queryKey: ["booking", variables.id] });
+      // Force immediate refetch so calendar/list reflects the change right away
+      queryClient.refetchQueries({ queryKey: ["bookings"] });
     },
   });
 };
