@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Box,
@@ -31,6 +31,7 @@ import {
 } from "@mui/icons-material";
 import {
   useBooking,
+  useUpdateBooking,
   useUpdateBookingStatus,
   useRecordBookingPayment,
 } from "../../hooks/useWorkspace";
@@ -51,13 +52,69 @@ function BookingDetails() {
   const navigate = useNavigate();
   const [openPaymentDialog, setOpenPaymentDialog] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [transactionId, setTransactionId] = useState("");
+  const [paymentNotes, setPaymentNotes] = useState("");
+  const [finalPrice, setFinalPrice] = useState("");
 
   const { data, isLoading, error, refetch } = useBooking(id);
+  const updateBookingMutation = useUpdateBooking();
   const updateStatusMutation = useUpdateBookingStatus();
   const recordPaymentMutation = useRecordBookingPayment();
   const { alertState, showSuccess, showError, hideAlert } = useAlert();
 
+  const booking = data?.data;
+
+  // Update finalPrice when booking data loads or changes
+  useEffect(() => {
+    if (booking) {
+      if (
+        booking.pricing?.finalPrice !== null &&
+        booking.pricing?.finalPrice !== undefined
+      ) {
+        setFinalPrice(booking.pricing.finalPrice);
+      } else {
+        setFinalPrice("");
+      }
+    }
+  }, [booking]);
+
+  const handleSaveFinalPrice = async () => {
+    if (!finalPrice || parseFloat(finalPrice) < 0) {
+      showError("Please enter a valid final price", "Validation Error");
+      return;
+    }
+
+    try {
+      await updateBookingMutation.mutateAsync({
+        id,
+        data: {
+          pricing: {
+            finalPrice: parseFloat(finalPrice),
+          },
+        },
+      });
+
+      showSuccess("Final price updated successfully!");
+    } catch (error) {
+      showError(error.message || "Failed to update final price");
+    }
+  };
+
   const handleStatusChange = async (newStatus) => {
+    // Validate finalPrice is set before confirming
+    if (
+      newStatus === "confirmed" &&
+      (booking?.pricing?.finalPrice === null ||
+        booking?.pricing?.finalPrice === undefined)
+    ) {
+      showError(
+        "Please set a final agreed price before confirming the booking.",
+        "Final Price Required",
+      );
+      return;
+    }
+
     try {
       await updateStatusMutation.mutateAsync({ id, status: newStatus });
       showSuccess("Booking status updated successfully");
@@ -90,12 +147,18 @@ function BookingDetails() {
 
   const handleOpenPaymentDialog = () => {
     setPaymentAmount("");
+    setPaymentMethod("cash");
+    setTransactionId("");
+    setPaymentNotes("");
     setOpenPaymentDialog(true);
   };
 
   const handleClosePaymentDialog = () => {
     setOpenPaymentDialog(false);
     setPaymentAmount("");
+    setPaymentMethod("cash");
+    setTransactionId("");
+    setPaymentNotes("");
   };
 
   const handleRecordPayment = async () => {
@@ -106,7 +169,8 @@ function BookingDetails() {
 
     const amount = parseFloat(paymentAmount);
     const pendingPayment =
-      booking.pricing.totalAmount - (booking.pricing.initialPayment || 0);
+      (booking.pricing.finalPrice || booking.pricing.totalAmount) -
+      (booking.pricing.initialPayment || 0);
 
     if (amount > pendingPayment) {
       showError(
@@ -120,6 +184,9 @@ function BookingDetails() {
       await recordPaymentMutation.mutateAsync({
         id: booking._id,
         amount,
+        paymentMethod,
+        transactionId,
+        notes: paymentNotes,
       });
       showSuccess(
         `Payment of ₹${amount.toLocaleString("en-IN")} recorded successfully`,
@@ -136,7 +203,6 @@ function BookingDetails() {
   if (isLoading) return <Loading />;
   if (error) return <ErrorMessage error={error} onRetry={refetch} />;
 
-  const booking = data?.data;
   if (!booking) return null;
 
   return (
@@ -409,14 +475,40 @@ function BookingDetails() {
               <Box
                 sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}
               >
-                <Typography variant="body2">Total Amount:</Typography>
+                <Typography variant="body2">Package Total:</Typography>
                 <Typography
                   variant="body2"
-                  sx={{ fontWeight: 600, color: "primary.main" }}
+                  sx={{ fontWeight: 600, color: "text.secondary" }}
                 >
                   {formatCurrency(booking.pricing.totalAmount || 0)}
                 </Typography>
               </Box>
+
+              {booking.pricing.finalPrice !== null &&
+                booking.pricing.finalPrice !== undefined && (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      mb: 1,
+                    }}
+                  >
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      Final Agreed Price:
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: 700,
+                        color: "primary.main",
+                        fontSize: "1.1rem",
+                      }}
+                    >
+                      {formatCurrency(booking.pricing.finalPrice)}
+                    </Typography>
+                  </Box>
+                )}
+
               <Box
                 sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}
               >
@@ -441,13 +533,14 @@ function BookingDetails() {
                   sx={{ fontWeight: 600, color: "error" }}
                 >
                   {formatCurrency(
-                    (booking.pricing.totalAmount || 0) -
-                      (booking.pricing.initialPayment || 0),
+                    (booking.pricing.finalPrice ||
+                      booking.pricing.totalAmount ||
+                      0) - (booking.pricing.initialPayment || 0),
                   )}
                 </Typography>
               </Box>
             </Box>
-            {(booking.pricing.totalAmount || 0) -
+            {(booking.pricing.finalPrice || booking.pricing.totalAmount || 0) -
               (booking.pricing.initialPayment || 0) >
               0 && (
               <Button
@@ -462,10 +555,333 @@ function BookingDetails() {
             )}
           </Paper>
 
+          {booking.paymentHistory && booking.paymentHistory.length > 0 && (
+            <Paper sx={{ p: 3, mb: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                Payment History
+              </Typography>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>
+                        <strong>Date</strong>
+                      </TableCell>
+                      <TableCell>
+                        <strong>Amount</strong>
+                      </TableCell>
+                      <TableCell>
+                        <strong>Method</strong>
+                      </TableCell>
+                      <TableCell>
+                        <strong>Transaction ID</strong>
+                      </TableCell>
+                      <TableCell>
+                        <strong>Notes</strong>
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {booking.paymentHistory
+                      .slice()
+                      .reverse()
+                      .map((payment, index) => (
+                        <TableRow key={index}>
+                          <TableCell>
+                            {formatDateTime(payment.paymentDate)}
+                          </TableCell>
+                          <TableCell
+                            sx={{ fontWeight: 600, color: "success.main" }}
+                          >
+                            {formatCurrency(payment.amount)}
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={payment.paymentMethod
+                                .replace("_", " ")
+                                .toUpperCase()}
+                              size="small"
+                              variant="outlined"
+                            />
+                          </TableCell>
+                          <TableCell>{payment.transactionId || "-"}</TableCell>
+                          <TableCell>{payment.notes || "-"}</TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
+          )}
+
+          {/* Final Price Section - Only in Draft Status */}
+          {booking.status === "draft" && (
+            <Paper sx={{ p: 3, mb: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                Set Final Agreed Price
+              </Typography>
+
+              {/* Price Suggestions */}
+              <Box
+                sx={{
+                  mb: 2,
+                  p: 2,
+                  bgcolor: "background.default",
+                  borderRadius: 1,
+                  border: "1px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <Typography
+                  variant="subtitle2"
+                  gutterBottom
+                  sx={{ fontWeight: 600, mb: 1.5 }}
+                >
+                  💡 Suggested Prices (Click to Use)
+                </Typography>
+
+                {(() => {
+                  const total = booking.pricing.totalAmount;
+
+                  // Negotiating Price: -5%
+                  const negotiatingPrice =
+                    Math.round((total * 0.95) / 100) * 100;
+
+                  // Best Price: Smart logic based on amount
+                  let bestDiscountPercent;
+                  if (total > 500000) {
+                    bestDiscountPercent = 0.015; // 1.5% for premium bookings
+                  } else if (total > 300000) {
+                    bestDiscountPercent = 0.02; // 2% for mid-high bookings
+                  } else if (total > 150000) {
+                    bestDiscountPercent = 0.025; // 2.5% for medium bookings
+                  } else {
+                    bestDiscountPercent = 0.03; // 3% for smaller bookings
+                  }
+
+                  // Round to nearest 500 for cleaner negotiation
+                  const bestPrice =
+                    Math.round((total * (1 - bestDiscountPercent)) / 500) * 500;
+
+                  // Customer Quote: +5%
+                  const customerQuote = Math.round((total * 1.05) / 100) * 100;
+
+                  return (
+                    <>
+                      {/* Customer Quote Price */}
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          mb: 1,
+                          p: 1,
+                          bgcolor: "warning.lighter",
+                          borderRadius: 0.5,
+                          cursor: "pointer",
+                          "&:hover": { bgcolor: "warning.light" },
+                        }}
+                        onClick={() => setFinalPrice(customerQuote)}
+                      >
+                        <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                          Initial Quote (+5%):
+                        </Typography>
+                        <Chip
+                          label={formatCurrency(customerQuote)}
+                          size="small"
+                          sx={{
+                            bgcolor: "warning.main",
+                            color: "white",
+                            fontWeight: 600,
+                            fontSize: "0.75rem",
+                          }}
+                        />
+                      </Box>
+
+                      {/* Recommended Best Price */}
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          mb: 1,
+                          p: 1,
+                          bgcolor: "success.lighter",
+                          borderRadius: 0.5,
+                          cursor: "pointer",
+                          "&:hover": { bgcolor: "success.light" },
+                        }}
+                        onClick={() => setFinalPrice(bestPrice)}
+                      >
+                        <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                          ⭐ Best Deal (
+                          {((1 - bestPrice / total) * 100).toFixed(1)}% off):
+                        </Typography>
+                        <Chip
+                          label={formatCurrency(bestPrice)}
+                          size="small"
+                          sx={{
+                            bgcolor: "success.main",
+                            color: "white",
+                            fontWeight: 600,
+                            fontSize: "0.75rem",
+                          }}
+                        />
+                      </Box>
+
+                      {/* Negotiating Price */}
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          p: 1,
+                          bgcolor: "info.lighter",
+                          borderRadius: 0.5,
+                          cursor: "pointer",
+                          "&:hover": { bgcolor: "info.light" },
+                        }}
+                        onClick={() => setFinalPrice(negotiatingPrice)}
+                      >
+                        <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                          Hard Negotiation (-5%):
+                        </Typography>
+                        <Chip
+                          label={formatCurrency(negotiatingPrice)}
+                          size="small"
+                          sx={{
+                            bgcolor: "info.main",
+                            color: "white",
+                            fontWeight: 600,
+                            fontSize: "0.75rem",
+                          }}
+                        />
+                      </Box>
+                    </>
+                  );
+                })()}
+
+                <Typography
+                  variant="caption"
+                  sx={{
+                    display: "block",
+                    mt: 1,
+                    color: "text.secondary",
+                    fontStyle: "italic",
+                  }}
+                >
+                  Click any suggestion to auto-fill final price
+                </Typography>
+              </Box>
+
+              {/* Final Price Input */}
+              <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+                <TextField
+                  label="Final Agreed Price (₹)"
+                  type="number"
+                  fullWidth
+                  required
+                  value={finalPrice}
+                  onChange={(e) => setFinalPrice(e.target.value)}
+                  inputProps={{ min: 0, step: 100 }}
+                  helperText="Enter or select the final negotiated price"
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      bgcolor: "background.paper",
+                      fontWeight: 600,
+                      fontSize: "1.1rem",
+                    },
+                  }}
+                />
+                <Button
+                  variant="contained"
+                  onClick={handleSaveFinalPrice}
+                  disabled={!finalPrice || updateBookingMutation.isPending}
+                  sx={{ minWidth: 120, height: 56 }}
+                >
+                  {updateBookingMutation.isPending ? "Saving..." : "Save Price"}
+                </Button>
+              </Box>
+
+              {booking.pricing.finalPrice !== null &&
+                booking.pricing.finalPrice !== undefined && (
+                  <Box
+                    sx={{
+                      mt: 2,
+                      p: 1.5,
+                      bgcolor: "success.lighter",
+                      borderRadius: 1,
+                      border: "1px solid",
+                      borderColor: "success.main",
+                    }}
+                  >
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 600, color: "success.dark" }}
+                    >
+                      ✓ Current Final Price:{" "}
+                      {formatCurrency(booking.pricing.finalPrice)}
+                    </Typography>
+                  </Box>
+                )}
+            </Paper>
+          )}
+
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
               Update Status
             </Typography>
+
+            {/* Status Information */}
+            {booking.status === "draft" && (
+              <Box
+                sx={{
+                  mb: 2,
+                  p: 2,
+                  bgcolor:
+                    booking.pricing.finalPrice !== null &&
+                    booking.pricing.finalPrice !== undefined
+                      ? "success.lighter"
+                      : "warning.lighter",
+                  borderRadius: 1,
+                  border: "1px solid",
+                  borderColor:
+                    booking.pricing.finalPrice !== null &&
+                    booking.pricing.finalPrice !== undefined
+                      ? "success.main"
+                      : "warning.main",
+                }}
+              >
+                {booking.pricing.finalPrice !== null &&
+                booking.pricing.finalPrice !== undefined ? (
+                  <>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 600, color: "success.dark", mb: 0.5 }}
+                    >
+                      ✓ Final Price Set:{" "}
+                      {formatCurrency(booking.pricing.finalPrice)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      This booking is ready to be confirmed.
+                    </Typography>
+                  </>
+                ) : (
+                  <>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 600, color: "warning.dark", mb: 0.5 }}
+                    >
+                      ⚠ Final Price Not Set
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Please set a final agreed price above before confirming.
+                    </Typography>
+                  </>
+                )}
+              </Box>
+            )}
+
             <FormControl fullWidth>
               <InputLabel>Status</InputLabel>
               <Select
@@ -531,8 +947,15 @@ function BookingDetails() {
                 Customer: <strong>{booking.customer.name}</strong>
               </Typography>
               <Typography variant="body2" color="textSecondary" gutterBottom>
-                Total Amount:{" "}
-                <strong>{formatCurrency(booking.pricing.totalAmount)}</strong>
+                {booking.pricing.finalPrice
+                  ? "Final Agreed Price"
+                  : "Total Amount"}
+                :{" "}
+                <strong>
+                  {formatCurrency(
+                    booking.pricing.finalPrice || booking.pricing.totalAmount,
+                  )}
+                </strong>
               </Typography>
               <Typography variant="body2" color="textSecondary" gutterBottom>
                 Already Paid:{" "}
@@ -549,8 +972,9 @@ function BookingDetails() {
                 Pending:{" "}
                 <strong>
                   {formatCurrency(
-                    (booking.pricing.totalAmount || 0) -
-                      (booking.pricing.initialPayment || 0),
+                    (booking.pricing.finalPrice ||
+                      booking.pricing.totalAmount ||
+                      0) - (booking.pricing.initialPayment || 0),
                   )}
                 </strong>
               </Typography>
@@ -563,11 +987,43 @@ function BookingDetails() {
                 inputProps={{
                   min: 0,
                   max:
-                    (booking.pricing.totalAmount || 0) -
-                    (booking.pricing.initialPayment || 0),
+                    (booking.pricing.finalPrice ||
+                      booking.pricing.totalAmount ||
+                      0) - (booking.pricing.initialPayment || 0),
                   step: 0.01,
                 }}
-                helperText={`Maximum: ${formatCurrency((booking.pricing.totalAmount || 0) - (booking.pricing.initialPayment || 0))}`}
+                helperText={`Maximum: ${formatCurrency((booking.pricing.finalPrice || booking.pricing.totalAmount || 0) - (booking.pricing.initialPayment || 0))}`}
+                sx={{ mb: 2 }}
+              />
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Payment Method</InputLabel>
+                <Select
+                  value={paymentMethod}
+                  label="Payment Method"
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                >
+                  <MenuItem value="cash">Cash</MenuItem>
+                  <MenuItem value="card">Card</MenuItem>
+                  <MenuItem value="upi">UPI</MenuItem>
+                  <MenuItem value="bank_transfer">Bank Transfer</MenuItem>
+                  <MenuItem value="cheque">Cheque</MenuItem>
+                  <MenuItem value="other">Other</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                fullWidth
+                label="Transaction ID (Optional)"
+                value={transactionId}
+                onChange={(e) => setTransactionId(e.target.value)}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Notes (Optional)"
+                multiline
+                rows={2}
+                value={paymentNotes}
+                onChange={(e) => setPaymentNotes(e.target.value)}
               />
             </Box>
           )}

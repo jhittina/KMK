@@ -61,27 +61,34 @@ function Packages() {
     );
   };
 
-  if (isLoading) return <Loading />;
-  if (error) return <ErrorMessage error={error} onRetry={refetch} />;
-
   // Get unique categories from packages
   const categories = [
     ...new Set(data?.data?.map((pkg) => pkg.category)),
   ].filter(Boolean);
 
-  // Filter packages based on search and category
-  const filteredPackages =
-    data?.data?.filter((pkg) => {
-      const matchesSearch = searchQuery
-        ? pkg.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          pkg.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          pkg.description?.toLowerCase().includes(searchQuery.toLowerCase())
-        : true;
-      const matchesCategory = categoryFilter
-        ? pkg.category === categoryFilter
-        : true;
-      return matchesSearch && matchesCategory;
-    }) || [];
+  // Filter and sort packages based on search and category
+  const filteredPackages = React.useMemo(() => {
+    let filtered =
+      data?.data?.filter((pkg) => {
+        const matchesSearch = searchQuery
+          ? pkg.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            pkg.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            pkg.description?.toLowerCase().includes(searchQuery.toLowerCase())
+          : true;
+        const matchesCategory = categoryFilter
+          ? pkg.category === categoryFilter
+          : true;
+        return matchesSearch && matchesCategory;
+      }) || [];
+
+    // Sort by latest updated first (updatedAt descending)
+    return filtered.sort(
+      (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt),
+    );
+  }, [data?.data, searchQuery, categoryFilter]);
+
+  if (isLoading) return <Loading />;
+  if (error) return <ErrorMessage error={error} onRetry={refetch} />;
 
   return (
     <Box>

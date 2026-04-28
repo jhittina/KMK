@@ -18,6 +18,7 @@ import {
   Chip,
   useTheme,
   useMediaQuery,
+  CircularProgress,
 } from "@mui/material";
 import {
   usePackages,
@@ -27,6 +28,7 @@ import {
 } from "../../hooks/useWorkspace";
 import Loading from "../../components/Common/Loading";
 import AlertDialog from "../../components/Common/AlertDialog";
+import DatePickerField from "../../components/Common/DatePickerField";
 import { useAlert } from "../../hooks/useAlert";
 import { formatCurrency } from "../../utils/helpers";
 
@@ -49,6 +51,7 @@ function CreateBooking() {
     discountType: "none",
     discountValue: 0,
     taxPercentage: 18,
+    finalPrice: "",
     initialPayment: 0,
   });
 
@@ -67,7 +70,8 @@ function CreateBooking() {
         }
       : null;
 
-  const { data: calculationData } = useCalculateBooking(calculationParams);
+  const { data: calculationData, isLoading: isCalculating } =
+    useCalculateBooking(calculationParams);
   const calculation = calculationData?.data;
 
   const createMutation = useCreateBooking();
@@ -124,6 +128,7 @@ function CreateBooking() {
         discountType: formData.discountType,
         discountValue: parseFloat(formData.discountValue) || 0,
         taxPercentage: parseFloat(formData.taxPercentage) || 18,
+        finalPrice: parseFloat(formData.finalPrice) || undefined,
         initialPayment: parseFloat(formData.initialPayment) || 0,
       };
 
@@ -284,19 +289,16 @@ function CreateBooking() {
               </Typography>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
-                  <TextField
+                  <DatePickerField
                     label="Event Date"
-                    type="date"
-                    fullWidth
                     required
-                    InputLabelProps={{ shrink: true }}
                     value={formData.eventDetails.eventDate}
-                    onChange={(e) =>
+                    onChange={(val) =>
                       setFormData({
                         ...formData,
                         eventDetails: {
                           ...formData.eventDetails,
-                          eventDate: e.target.value,
+                          eventDate: val,
                         },
                       })
                     }
@@ -510,7 +512,22 @@ function CreateBooking() {
                 Price Summary
               </Typography>
 
-              {calculation ? (
+              {isCalculating ? (
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    py: 4,
+                  }}
+                >
+                  <CircularProgress size={40} sx={{ mb: 2 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    Calculating price...
+                  </Typography>
+                </Box>
+              ) : calculation ? (
                 <Box>
                   <Box
                     sx={{
@@ -562,7 +579,7 @@ function CreateBooking() {
                       mb: 1,
                     }}
                   >
-                    <Typography variant="h6">Total:</Typography>
+                    <Typography variant="h6">Package Total:</Typography>
                     <Typography
                       variant="h6"
                       sx={{ fontWeight: 700, color: "primary.main" }}
@@ -570,6 +587,217 @@ function CreateBooking() {
                       {formatCurrency(calculation.totalAmount)}
                     </Typography>
                   </Box>
+
+                  {/* Price Suggestions */}
+                  <Box
+                    sx={{
+                      mt: 3,
+                      mb: 2,
+                      p: 2,
+                      bgcolor: "background.default",
+                      borderRadius: 1,
+                      border: "1px solid",
+                      borderColor: "divider",
+                    }}
+                  >
+                    <Typography
+                      variant="subtitle2"
+                      gutterBottom
+                      sx={{ fontWeight: 600, mb: 1.5 }}
+                    >
+                      💡 Suggested Prices (Click to Use)
+                    </Typography>
+
+                    {(() => {
+                      const total = calculation.totalAmount;
+
+                      // Negotiating Price: -5%
+                      const negotiatingPrice =
+                        Math.round((total * 0.95) / 100) * 100;
+
+                      // Best Price: Smart logic based on amount and guest count
+                      // Larger events get smaller discounts, but still attractive
+                      let bestDiscountPercent;
+                      if (total > 500000) {
+                        bestDiscountPercent = 0.015; // 1.5% for premium bookings
+                      } else if (total > 300000) {
+                        bestDiscountPercent = 0.02; // 2% for mid-high bookings
+                      } else if (total > 150000) {
+                        bestDiscountPercent = 0.025; // 2.5% for medium bookings
+                      } else {
+                        bestDiscountPercent = 0.03; // 3% for smaller bookings
+                      }
+
+                      // Round to nearest 500 for cleaner negotiation
+                      const bestPrice =
+                        Math.round((total * (1 - bestDiscountPercent)) / 500) *
+                        500;
+
+                      // Customer Quote: +5%
+                      const customerQuote =
+                        Math.round((total * 1.05) / 100) * 100;
+
+                      return (
+                        <>
+                          {/* Customer Quote Price */}
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              mb: 1,
+                              p: 1,
+                              bgcolor: "warning.lighter",
+                              borderRadius: 0.5,
+                              cursor: "pointer",
+                              "&:hover": { bgcolor: "warning.light" },
+                            }}
+                            onClick={() =>
+                              setFormData({
+                                ...formData,
+                                finalPrice: customerQuote,
+                              })
+                            }
+                          >
+                            <Typography
+                              variant="caption"
+                              sx={{ fontWeight: 500 }}
+                            >
+                              Initial Quote (+5%):
+                            </Typography>
+                            <Chip
+                              label={formatCurrency(customerQuote)}
+                              size="small"
+                              sx={{
+                                bgcolor: "warning.main",
+                                color: "white",
+                                fontWeight: 600,
+                                fontSize: "0.75rem",
+                              }}
+                            />
+                          </Box>
+
+                          {/* Recommended Best Price */}
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              mb: 1,
+                              p: 1,
+                              bgcolor: "success.lighter",
+                              borderRadius: 0.5,
+                              cursor: "pointer",
+                              "&:hover": { bgcolor: "success.light" },
+                            }}
+                            onClick={() =>
+                              setFormData({
+                                ...formData,
+                                finalPrice: bestPrice,
+                              })
+                            }
+                          >
+                            <Typography
+                              variant="caption"
+                              sx={{ fontWeight: 500 }}
+                            >
+                              ⭐ Best Deal (
+                              {((1 - bestPrice / total) * 100).toFixed(1)}%
+                              off):
+                            </Typography>
+                            <Chip
+                              label={formatCurrency(bestPrice)}
+                              size="small"
+                              sx={{
+                                bgcolor: "success.main",
+                                color: "white",
+                                fontWeight: 600,
+                                fontSize: "0.75rem",
+                              }}
+                            />
+                          </Box>
+
+                          {/* Negotiating Price */}
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              p: 1,
+                              bgcolor: "info.lighter",
+                              borderRadius: 0.5,
+                              cursor: "pointer",
+                              "&:hover": { bgcolor: "info.light" },
+                            }}
+                            onClick={() =>
+                              setFormData({
+                                ...formData,
+                                finalPrice: negotiatingPrice,
+                              })
+                            }
+                          >
+                            <Typography
+                              variant="caption"
+                              sx={{ fontWeight: 500 }}
+                            >
+                              Hard Negotiation (-5%):
+                            </Typography>
+                            <Chip
+                              label={formatCurrency(negotiatingPrice)}
+                              size="small"
+                              sx={{
+                                bgcolor: "info.main",
+                                color: "white",
+                                fontWeight: 600,
+                                fontSize: "0.75rem",
+                              }}
+                            />
+                          </Box>
+                        </>
+                      );
+                    })()}
+
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: "block",
+                        mt: 1,
+                        color: "text.secondary",
+                        fontStyle: "italic",
+                      }}
+                    >
+                      Click any suggestion to auto-fill final price
+                    </Typography>
+                  </Box>
+
+                  {/* Final Price Input */}
+                  <Box sx={{ mb: 2 }}>
+                    <TextField
+                      label="Final Agreed Price (₹)"
+                      type="number"
+                      fullWidth
+                      required
+                      value={formData.finalPrice}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          finalPrice: parseFloat(e.target.value) || "",
+                        })
+                      }
+                      inputProps={{ min: 0, step: 100 }}
+                      helperText="Required: Enter the final negotiated price to create booking"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          bgcolor: "background.paper",
+                          fontWeight: 600,
+                          fontSize: "1.1rem",
+                        },
+                      }}
+                    />
+                  </Box>
+
+                  <Divider sx={{ my: 2 }} />
+
                   <Box
                     sx={{
                       display: "flex",
@@ -602,7 +830,8 @@ function CreateBooking() {
                       sx={{ fontWeight: 600, color: "error" }}
                     >
                       {formatCurrency(
-                        calculation.totalAmount -
+                        (parseFloat(formData.finalPrice) ||
+                          calculation.totalAmount) -
                           (parseFloat(formData.initialPayment) || 0),
                       )}
                     </Typography>
@@ -631,6 +860,9 @@ function CreateBooking() {
                     !formData.eventDetails.eventDate ||
                     !formData.eventDetails.venue ||
                     !formData.eventDetails.guestCount ||
+                    !formData.finalPrice ||
+                    isCalculating ||
+                    !calculation ||
                     createMutation.isPending
                   }
                 >

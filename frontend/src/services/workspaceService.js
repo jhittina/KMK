@@ -20,8 +20,8 @@ export const bookingService = {
   update: (id, data) => api.put(`/workspace/bookings/${id}`, data),
   updateStatus: (id, status) =>
     api.put(`/workspace/bookings/${id}/status`, { status }),
-  recordPayment: (id, amount) =>
-    api.put(`/workspace/bookings/${id}/record-payment`, { amount }),
+  recordPayment: (id, data) =>
+    api.put(`/workspace/bookings/${id}/record-payment`, data),
   delete: (id) => api.delete(`/workspace/bookings/${id}`),
   calculate: (data) => api.post("/workspace/bookings/calculate", data),
 };

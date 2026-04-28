@@ -109,6 +109,7 @@ exports.createBooking = async (req, res) => {
       discountType,
       discountValue,
       taxPercentage,
+      finalPrice,
       initialPayment,
       notes,
     } = req.body;
@@ -226,8 +227,21 @@ exports.createBooking = async (req, res) => {
         tax: calculation.tax,
         taxPercentage: calculation.taxPercentage,
         totalAmount: calculation.totalAmount,
-        initialPayment: parseFloat(initialPayment) || 0,
+        finalPrice: finalPrice ? parseFloat(finalPrice) : null,
+        initialPayment: 0, // Will be calculated from payment history
       },
+      paymentHistory:
+        initialPayment && initialPayment > 0
+          ? [
+              {
+                amount: parseFloat(initialPayment),
+                paymentDate: new Date(),
+                paymentMethod: "cash",
+                notes: "Initial payment at booking",
+                recordedBy: req.user ? req.user.id : null,
+              },
+            ]
+          : [],
       notes,
     });
 
@@ -235,13 +249,18 @@ exports.createBooking = async (req, res) => {
     try {
       let customerRecord = await Customer.findOne({ phone: customer.phone });
 
+      // Use finalPrice if set, otherwise use totalAmount
+      const bookingValue = finalPrice
+        ? parseFloat(finalPrice)
+        : calculation.totalAmount;
+
       if (customerRecord) {
         // Update existing customer
         customerRecord.name = customer.name || customerRecord.name;
         customerRecord.email = customer.email || customerRecord.email;
         customerRecord.bookings.push(booking._id);
         customerRecord.totalBookings = customerRecord.bookings.length;
-        customerRecord.totalSpent += calculation.totalAmount;
+        customerRecord.totalSpent += bookingValue;
         await customerRecord.save();
       } else {
         // Create new customer
@@ -251,7 +270,7 @@ exports.createBooking = async (req, res) => {
           phone: customer.phone,
           bookings: [booking._id],
           totalBookings: 1,
-          totalSpent: calculation.totalAmount,
+          totalSpent: bookingValue,
         });
       }
     } catch (customerError) {
@@ -371,6 +390,16 @@ exports.updateBooking = async (req, res) => {
       booking.pricing.tax = calculation.tax;
       booking.pricing.taxPercentage = calculation.taxPercentage;
       booking.pricing.totalAmount = calculation.totalAmount;
+
+      // Preserve or update finalPrice when recalculating
+      if (pricing && pricing.finalPrice !== undefined) {
+        booking.pricing.finalPrice = pricing.finalPrice
+          ? parseFloat(pricing.finalPrice)
+          : null;
+      }
+
+      // Mark pricing as modified for Mongoose to detect changes
+      booking.markModified("pricing");
     } else if (pricing) {
       // Update pricing fields only
       if (pricing.discountType !== undefined)
@@ -379,11 +408,28 @@ exports.updateBooking = async (req, res) => {
         booking.pricing.discountValue = pricing.discountValue;
       if (pricing.taxPercentage !== undefined)
         booking.pricing.taxPercentage = pricing.taxPercentage;
+      if (pricing.finalPrice !== undefined) {
+        booking.pricing.finalPrice = pricing.finalPrice
+          ? parseFloat(pricing.finalPrice)
+          : null;
+      }
+
+      // Mark pricing as modified for Mongoose to detect changes
+      booking.markModified("pricing");
+    }
+
+    // Update finalPrice if provided (even when recalculating)
+    if (pricing && pricing.finalPrice !== undefined) {
+      booking.pricing.finalPrice = pricing.finalPrice
+        ? parseFloat(pricing.finalPrice)
+        : null;
+      booking.markModified("pricing");
     }
 
     // Update initialPayment if provided
     if (pricing && pricing.initialPayment !== undefined) {
       booking.pricing.initialPayment = parseFloat(pricing.initialPayment) || 0;
+      booking.markModified("pricing");
     }
 
     // Update other fields
@@ -506,7 +552,12 @@ exports.recordBookingPayment = async (req, res) => {
       });
     }
 
-    const { amount } = req.body;
+    const {
+      amount,
+      paymentMethod = "cash",
+      transactionId = "",
+      notes = "",
+    } = req.body;
 
     if (!amount || amount <= 0) {
       return res.status(400).json({
@@ -522,7 +573,13 @@ exports.recordBookingPayment = async (req, res) => {
       });
     }
 
-    await booking.recordPayment(amount);
+    await booking.recordPayment(
+      amount,
+      paymentMethod,
+      transactionId,
+      notes,
+      req.user.id,
+    );
 
     res.json({
       success: true,

@@ -1,10 +1,5 @@
 import React, { useState, useMemo, createContext } from "react";
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-} from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -12,6 +7,7 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 import Layout from "./components/Layout/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
+import RoleBasedRedirect from "./components/RoleBasedRedirect";
 import { AuthProvider } from "./context/AuthContext";
 
 // Auth Pages
@@ -20,7 +16,7 @@ import Login from "./pages/Login";
 // Self Service Pages
 import Categories from "./pages/Config/Categories";
 import Items from "./pages/Config/Items";
-import Maintenance from "./pages/Config/Maintenance";
+import Expenses from "./pages/Config/Expenses";
 
 // Workspace Profile Pages
 import Packages from "./pages/Workspace/Packages";
@@ -284,6 +280,23 @@ function App() {
                 "& .MuiInputLabel-root": {
                   fontSize: "0.95rem",
                 },
+                // Style date/time inputs
+                '& input[type="date"], & input[type="datetime-local"], & input[type="time"]':
+                  {
+                    colorScheme: mode === "dark" ? "dark" : "light",
+                    "&::-webkit-calendar-picker-indicator": {
+                      filter: mode === "dark" ? "invert(0.8)" : "none",
+                      cursor: "pointer",
+                      borderRadius: "4px",
+                      padding: "4px",
+                      "&:hover": {
+                        backgroundColor:
+                          mode === "dark"
+                            ? "rgba(255,255,255,0.1)"
+                            : "rgba(0,0,0,0.05)",
+                      },
+                    },
+                  },
               },
             },
           },
@@ -333,11 +346,15 @@ function App() {
                     <ProtectedRoute>
                       <Layout>
                         <Routes>
+                          <Route path="/" element={<RoleBasedRedirect />} />
                           <Route
-                            path="/"
-                            element={<Navigate to="/dashboard" replace />}
+                            path="/dashboard"
+                            element={
+                              <ProtectedRoute adminOnly>
+                                <Dashboard />
+                              </ProtectedRoute>
+                            }
                           />
-                          <Route path="/dashboard" element={<Dashboard />} />
 
                           {/* Self Service Routes - Admin Only */}
                           <Route
@@ -357,10 +374,10 @@ function App() {
                             }
                           />
                           <Route
-                            path="/config/maintenance"
+                            path="/config/expenses"
                             element={
-                              <ProtectedRoute adminOnly>
-                                <Maintenance />
+                              <ProtectedRoute>
+                                <Expenses />
                               </ProtectedRoute>
                             }
                           />

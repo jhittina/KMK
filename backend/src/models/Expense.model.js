@@ -12,6 +12,8 @@ const expenseSchema = new mongoose.Schema(
       enum: [
         "salary",
         "maintenance",
+        "expenses",
+        "new_inventory",
         "investment",
         "utilities",
         "rent",

@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Grid,
   Card,
@@ -28,6 +29,7 @@ import {
   AccountBalance as ExpenseIcon,
   Payments as PaymentIcon,
   Receipt as InvoiceIcon,
+  AccountBalanceWallet as ProfitIcon,
 } from "@mui/icons-material";
 import {
   PieChart,
@@ -48,6 +50,7 @@ import {
   ComposedChart,
 } from "recharts";
 import Loading from "../components/Common/Loading";
+import BookingCalendar from "../components/Common/BookingCalendar";
 import { useItems, useExpenses, useExpenseSummary } from "../hooks/useConfig";
 import { usePackages, useBookings, useCustomers } from "../hooks/useWorkspace";
 
@@ -139,6 +142,7 @@ function StatCard({ title, value, icon, color, isMobile, trend, trendValue }) {
 
 function Dashboard() {
   const theme = useTheme();
+  const navigate = useNavigate();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isTablet = useMediaQuery(theme.breakpoints.down("md"));
   const [selectedTab, setSelectedTab] = React.useState(0);
@@ -203,7 +207,110 @@ function Dashboard() {
     };
   }, [bookingsData, compareYearOffset]);
 
-  // Process booking status data
+  // Calculate profit metrics (revenue - expenses)
+  const profitMetrics = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const now = new Date();
+
+    const monthlyExpense = expenseSummaryData?.data?.monthlyTotal || 0;
+    const oneTimeExpenseYear = expenseSummaryData?.data?.oneTimeTotal || 0;
+    const yearlyExpense = monthlyExpense * 12 + oneTimeExpenseYear;
+
+    // This year revenue
+    const thisYearRevenue = revenueMetrics.thisYear;
+    const thisYearProfit = thisYearRevenue - yearlyExpense;
+
+    // This month one-time expenses (from full expense list)
+    const oneTimeExpenseMonth = (() => {
+      if (!expensesData?.data) return 0;
+      return expensesData.data
+        .filter((e) => {
+          if (e.type !== "one-time") return false;
+          const d = new Date(e.startDate);
+          return (
+            d.getMonth() === now.getMonth() && d.getFullYear() === currentYear
+          );
+        })
+        .reduce((sum, e) => sum + (e.amount || 0), 0);
+    })();
+
+    const thisMonthTotalExpense = monthlyExpense + oneTimeExpenseMonth;
+
+    const thisMonthRevenue = (() => {
+      if (!bookingsData?.data) return 0;
+      return bookingsData.data
+        .filter((b) => {
+          const d = new Date(b.createdAt);
+          return (
+            d.getMonth() === now.getMonth() && d.getFullYear() === currentYear
+          );
+        })
+        .reduce((sum, b) => sum + (b.pricing?.totalAmount || 0), 0);
+    })();
+
+    const thisMonthProfit = thisMonthRevenue - thisMonthTotalExpense;
+    const profitMarginYear =
+      thisYearRevenue > 0
+        ? ((thisYearProfit / thisYearRevenue) * 100).toFixed(1)
+        : 0;
+    const profitMarginMonth =
+      thisMonthRevenue > 0
+        ? ((thisMonthProfit / thisMonthRevenue) * 100).toFixed(1)
+        : 0;
+
+    // Monthly profit trend (last 12 months) — include one-time per month
+    const monthlyTrend = (() => {
+      if (!bookingsData?.data) return [];
+      return Array.from({ length: 12 }, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
+        const monthRevenue = bookingsData.data
+          .filter((b) => {
+            const bd = new Date(b.createdAt);
+            return (
+              bd.getMonth() === d.getMonth() &&
+              bd.getFullYear() === d.getFullYear()
+            );
+          })
+          .reduce((sum, b) => sum + (b.pricing?.totalAmount || 0), 0);
+
+        const oneTimeThisMonth = expensesData?.data
+          ? expensesData.data
+              .filter((e) => {
+                if (e.type !== "one-time") return false;
+                const ed = new Date(e.startDate);
+                return (
+                  ed.getMonth() === d.getMonth() &&
+                  ed.getFullYear() === d.getFullYear()
+                );
+              })
+              .reduce((sum, e) => sum + (e.amount || 0), 0)
+          : 0;
+
+        const totalExpensesMonth = monthlyExpense + oneTimeThisMonth;
+        const monthLabel = d.toLocaleString("default", { month: "short" });
+        return {
+          month: `${monthLabel} ${d.getFullYear()}`,
+          revenue: monthRevenue,
+          expenses: totalExpensesMonth,
+          profit: monthRevenue - totalExpensesMonth,
+        };
+      });
+    })();
+
+    return {
+      monthlyExpense,
+      oneTimeExpenseYear,
+      oneTimeExpenseMonth,
+      yearlyExpense,
+      thisMonthTotalExpense,
+      thisMonthRevenue,
+      thisMonthProfit,
+      thisYearProfit,
+      profitMarginYear: parseFloat(profitMarginYear),
+      profitMarginMonth: parseFloat(profitMarginMonth),
+      monthlyTrend,
+    };
+  }, [expenseSummaryData, expensesData, revenueMetrics, bookingsData]);
   const bookingStatusData = useMemo(() => {
     if (!bookingsData?.data) return [];
 
@@ -531,9 +638,11 @@ function Dashboard() {
           scrollButtons="auto"
         >
           <Tab label="Overview" />
+          <Tab label="Calendar" />
           <Tab label="Revenue Analytics" />
           <Tab label="Performance" />
-          <Tab label="Maintenance" />
+          <Tab label="Expenses" />
+          <Tab label="Profit" />
         </Tabs>
       </Box>
 
@@ -762,8 +871,20 @@ function Dashboard() {
         </Grid>
       )}
 
-      {/* Revenue Analytics Tab */}
+      {/* Calendar Tab */}
       {selectedTab === 1 && (
+        <Paper sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
+          <BookingCalendar
+            bookings={bookingsData?.data || []}
+            onBookingClick={(booking) =>
+              navigate(`/workspace/bookings/${booking._id}`)
+            }
+          />
+        </Paper>
+      )}
+
+      {/* Revenue Analytics Tab */}
+      {selectedTab === 2 && (
         <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }}>
           {/* Year-over-Year Revenue Comparison */}
           <Grid item xs={12}>
@@ -1094,7 +1215,7 @@ function Dashboard() {
       )}
 
       {/* Performance Tab */}
-      {selectedTab === 2 && (
+      {selectedTab === 3 && (
         <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }}>
           {/* Popular Packages */}
           <Grid item xs={12} md={6}>
@@ -2253,8 +2374,8 @@ function Dashboard() {
         </Grid>
       )}
 
-      {/* Maintenance Tab */}
-      {selectedTab === 3 && (
+      {/* Expenses Tab */}
+      {selectedTab === 4 && (
         <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }}>
           {/* Expense Stats Cards */}
           <Grid item xs={6} md={3}>
@@ -2435,15 +2556,17 @@ function Dashboard() {
                       color:
                         cat.category === "salary"
                           ? "#3b82f6"
-                          : cat.category === "maintenance"
+                          : cat.category === "expenses"
                             ? "#ef4444"
-                            : cat.category === "investment"
-                              ? "#10b981"
-                              : cat.category === "utilities"
-                                ? "#f59e0b"
-                                : cat.category === "rent"
-                                  ? "#8b5cf6"
-                                  : "#6b7280",
+                            : cat.category === "new_inventory"
+                              ? "#ec4899"
+                              : cat.category === "investment"
+                                ? "#10b981"
+                                : cat.category === "utilities"
+                                  ? "#f59e0b"
+                                  : cat.category === "rent"
+                                    ? "#8b5cf6"
+                                    : "#6b7280",
                     }))}
                     cx="50%"
                     cy="50%"
@@ -2465,15 +2588,17 @@ function Dashboard() {
                           fill={
                             entry.category === "salary"
                               ? "#3b82f6"
-                              : entry.category === "maintenance"
+                              : entry.category === "expenses"
                                 ? "#ef4444"
-                                : entry.category === "investment"
-                                  ? "#10b981"
-                                  : entry.category === "utilities"
-                                    ? "#f59e0b"
-                                    : entry.category === "rent"
-                                      ? "#8b5cf6"
-                                      : "#6b7280"
+                                : entry.category === "new_inventory"
+                                  ? "#ec4899"
+                                  : entry.category === "investment"
+                                    ? "#10b981"
+                                    : entry.category === "utilities"
+                                      ? "#f59e0b"
+                                      : entry.category === "rent"
+                                        ? "#8b5cf6"
+                                        : "#6b7280"
                           }
                         />
                       ),
@@ -2556,6 +2681,591 @@ function Dashboard() {
                   <Bar dataKey="amount" fill="#ef4444" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+            </Paper>
+          </Grid>
+        </Grid>
+      )}
+
+      {/* Profit Tab */}
+      {selectedTab === 5 && (
+        <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }}>
+          {/* Summary Cards */}
+          <Grid item xs={6} md={3}>
+            <Card
+              sx={{
+                background: `linear-gradient(135deg, ${profitMetrics.thisMonthProfit >= 0 ? "#10b981" : "#ef4444"}15 0%, ${profitMetrics.thisMonthProfit >= 0 ? "#10b981" : "#ef4444"}05 100%)`,
+                borderLeft: `4px solid ${profitMetrics.thisMonthProfit >= 0 ? "#10b981" : "#ef4444"}`,
+                transition: "transform 0.2s, box-shadow 0.2s",
+                "&:hover": { transform: "translateY(-4px)" },
+              }}
+            >
+              <CardContent sx={{ p: { xs: 1.5, sm: 2 } }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <Avatar
+                    sx={{
+                      bgcolor:
+                        profitMetrics.thisMonthProfit >= 0
+                          ? "#10b981"
+                          : "#ef4444",
+                      width: 48,
+                      height: 48,
+                    }}
+                  >
+                    <ProfitIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography
+                      variant={isMobile ? "h6" : "h5"}
+                      sx={{
+                        fontWeight: 800,
+                        color:
+                          profitMetrics.thisMonthProfit >= 0
+                            ? "#10b981"
+                            : "#ef4444",
+                      }}
+                    >
+                      {profitMetrics.thisMonthProfit >= 0 ? "+" : ""}₹
+                      {Math.abs(profitMetrics.thisMonthProfit / 1000).toFixed(
+                        1,
+                      )}
+                      K
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      This Month Profit
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label={`${profitMetrics.profitMarginMonth >= 0 ? "+" : ""}${profitMetrics.profitMarginMonth}% margin`}
+                      color={
+                        profitMetrics.profitMarginMonth >= 0
+                          ? "success"
+                          : "error"
+                      }
+                      sx={{ mt: 0.5, fontSize: "0.65rem" }}
+                    />
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          <Grid item xs={6} md={3}>
+            <Card
+              sx={{
+                background: `linear-gradient(135deg, ${profitMetrics.thisYearProfit >= 0 ? "#8b5cf6" : "#ef4444"}15 0%, ${profitMetrics.thisYearProfit >= 0 ? "#8b5cf6" : "#ef4444"}05 100%)`,
+                borderLeft: `4px solid ${profitMetrics.thisYearProfit >= 0 ? "#8b5cf6" : "#ef4444"}`,
+                transition: "transform 0.2s, box-shadow 0.2s",
+                "&:hover": { transform: "translateY(-4px)" },
+              }}
+            >
+              <CardContent sx={{ p: { xs: 1.5, sm: 2 } }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <Avatar
+                    sx={{
+                      bgcolor:
+                        profitMetrics.thisYearProfit >= 0
+                          ? "#8b5cf6"
+                          : "#ef4444",
+                      width: 48,
+                      height: 48,
+                    }}
+                  >
+                    <ProfitIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography
+                      variant={isMobile ? "h6" : "h5"}
+                      sx={{
+                        fontWeight: 800,
+                        color:
+                          profitMetrics.thisYearProfit >= 0
+                            ? "#8b5cf6"
+                            : "#ef4444",
+                      }}
+                    >
+                      {profitMetrics.thisYearProfit >= 0 ? "+" : ""}₹
+                      {Math.abs(profitMetrics.thisYearProfit / 1000).toFixed(1)}
+                      K
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      This Year Profit
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label={`${profitMetrics.profitMarginYear >= 0 ? "+" : ""}${profitMetrics.profitMarginYear}% margin`}
+                      color={
+                        profitMetrics.profitMarginYear >= 0
+                          ? "success"
+                          : "error"
+                      }
+                      sx={{ mt: 0.5, fontSize: "0.65rem" }}
+                    />
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          <Grid item xs={6} md={3}>
+            <Card
+              sx={{
+                background:
+                  "linear-gradient(135deg, #10b98115 0%, #10b98105 100%)",
+                borderLeft: "4px solid #10b981",
+                transition: "transform 0.2s, box-shadow 0.2s",
+                "&:hover": { transform: "translateY(-4px)" },
+              }}
+            >
+              <CardContent sx={{ p: { xs: 1.5, sm: 2 } }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <Avatar sx={{ bgcolor: "#10b981", width: 48, height: 48 }}>
+                    <RevenueIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography
+                      variant={isMobile ? "h6" : "h5"}
+                      sx={{ fontWeight: 800, color: "#10b981" }}
+                    >
+                      ₹{(revenueMetrics.thisYear / 1000).toFixed(1)}K
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      This Year Revenue
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          <Grid item xs={6} md={3}>
+            <Card
+              sx={{
+                background:
+                  "linear-gradient(135deg, #ef444415 0%, #ef444405 100%)",
+                borderLeft: "4px solid #ef4444",
+                transition: "transform 0.2s, box-shadow 0.2s",
+                "&:hover": { transform: "translateY(-4px)" },
+              }}
+            >
+              <CardContent sx={{ p: { xs: 1.5, sm: 2 } }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <Avatar sx={{ bgcolor: "#ef4444", width: 48, height: 48 }}>
+                    <ExpenseIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography
+                      variant={isMobile ? "h6" : "h5"}
+                      sx={{ fontWeight: 800, color: "#ef4444" }}
+                    >
+                      ₹{(profitMetrics.yearlyExpense / 1000).toFixed(1)}K
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      This Year Expenses
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      ₹{(profitMetrics.monthlyExpense / 1000).toFixed(1)}K/mo
+                      recurring
+                      {profitMetrics.oneTimeExpenseYear > 0 &&
+                        ` + ₹${(profitMetrics.oneTimeExpenseYear / 1000).toFixed(1)}K one-time`}
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Monthly Revenue vs Expenses vs Profit Chart */}
+          <Grid item xs={12}>
+            <Paper sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
+              <Typography
+                variant={isMobile ? "subtitle1" : "h6"}
+                gutterBottom
+                sx={{
+                  fontWeight: 600,
+                  mb: { xs: 2, md: 3 },
+                  fontSize: { xs: "1rem", sm: "1.1rem", md: "1.25rem" },
+                }}
+              >
+                📊 Revenue vs Expenses vs Profit — Last 12 Months
+              </Typography>
+              <ResponsiveContainer
+                width="100%"
+                height={isMobile ? 300 : isTablet ? 350 : 400}
+              >
+                <ComposedChart data={profitMetrics.monthlyTrend}>
+                  <defs>
+                    <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop
+                        offset="5%"
+                        stopColor="#10b981"
+                        stopOpacity={0.25}
+                      />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis
+                    dataKey="month"
+                    stroke="#6b7280"
+                    tick={{ fontSize: isMobile ? 9 : 11 }}
+                    angle={isMobile ? -45 : -20}
+                    textAnchor="end"
+                    height={isMobile ? 60 : 45}
+                  />
+                  <YAxis
+                    stroke="#6b7280"
+                    tick={{ fontSize: isMobile ? 10 : 12 }}
+                    tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`}
+                  />
+                  <Tooltip
+                    formatter={(value, name) => [
+                      `₹${Math.round(value).toLocaleString("en-IN")}`,
+                      name,
+                    ]}
+                    contentStyle={{
+                      backgroundColor: "#1e293b",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: "8px",
+                      fontSize: isMobile ? "12px" : "13px",
+                      color: "#f1f5f9",
+                    }}
+                  />
+                  <Legend />
+                  <Bar
+                    dataKey="revenue"
+                    name="Revenue"
+                    fill="#10b981"
+                    radius={[4, 4, 0, 0]}
+                    opacity={0.85}
+                  />
+                  <Bar
+                    dataKey="expenses"
+                    name="Expenses"
+                    fill="#ef4444"
+                    radius={[4, 4, 0, 0]}
+                    opacity={0.85}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="profit"
+                    name="Profit"
+                    stroke="#a78bfa"
+                    strokeWidth={3}
+                    fill="url(#profitGrad)"
+                    dot={{ fill: "#a78bfa", r: 4 }}
+                    activeDot={{ r: 6 }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </Paper>
+          </Grid>
+
+          {/* Detailed breakdown & insights */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: { xs: 2, sm: 2.5, md: 3 }, height: "100%" }}>
+              <Typography
+                variant={isMobile ? "subtitle1" : "h6"}
+                gutterBottom
+                sx={{
+                  fontWeight: 600,
+                  mb: 2,
+                  fontSize: { xs: "1rem", sm: "1.1rem", md: "1.25rem" },
+                }}
+              >
+                📋 Profit Breakdown Summary
+              </Typography>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {[
+                  {
+                    label: "Monthly Revenue",
+                    value: profitMetrics.thisMonthRevenue,
+                    color: "#10b981",
+                  },
+                  {
+                    label: "Recurring Expenses",
+                    value: profitMetrics.monthlyExpense,
+                    color: "#ef4444",
+                    negate: true,
+                  },
+                  ...(profitMetrics.oneTimeExpenseMonth > 0
+                    ? [
+                        {
+                          label: "One-time Expenses (this month)",
+                          value: profitMetrics.oneTimeExpenseMonth,
+                          color: "#f59e0b",
+                          negate: true,
+                        },
+                      ]
+                    : []),
+                  {
+                    label: "Monthly Net Profit",
+                    value: profitMetrics.thisMonthProfit,
+                    color:
+                      profitMetrics.thisMonthProfit >= 0
+                        ? "#8b5cf6"
+                        : "#ef4444",
+                    bold: true,
+                  },
+                  { label: "divider" },
+                  {
+                    label: "Yearly Revenue (this year)",
+                    value: revenueMetrics.thisYear,
+                    color: "#10b981",
+                  },
+                  {
+                    label: "Recurring Expenses × 12",
+                    value: profitMetrics.monthlyExpense * 12,
+                    color: "#ef4444",
+                    negate: true,
+                  },
+                  ...(profitMetrics.oneTimeExpenseYear > 0
+                    ? [
+                        {
+                          label: "One-time Expenses (this year)",
+                          value: profitMetrics.oneTimeExpenseYear,
+                          color: "#f59e0b",
+                          negate: true,
+                        },
+                      ]
+                    : []),
+                  {
+                    label: "Yearly Net Profit",
+                    value: profitMetrics.thisYearProfit,
+                    color:
+                      profitMetrics.thisYearProfit >= 0 ? "#8b5cf6" : "#ef4444",
+                    bold: true,
+                  },
+                ].map((row, i) => {
+                  if (row.label === "divider")
+                    return (
+                      <Box
+                        key={i}
+                        sx={{
+                          borderTop: "1px dashed",
+                          borderColor: "divider",
+                          my: 0.5,
+                        }}
+                      />
+                    );
+                  return (
+                    <Box
+                      key={i}
+                      sx={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        p: row.bold ? 1.5 : 1,
+                        borderRadius: 2,
+                        bgcolor: row.bold ? `${row.color}10` : "transparent",
+                        border: row.bold ? `1px solid ${row.color}30` : "none",
+                      }}
+                    >
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: row.bold ? 700 : 500,
+                          color: row.bold ? row.color : "text.secondary",
+                        }}
+                      >
+                        {row.label}
+                      </Typography>
+                      <Typography
+                        variant="body1"
+                        sx={{
+                          fontWeight: row.bold ? 800 : 600,
+                          color: row.color,
+                        }}
+                      >
+                        {row.negate ? "−" : row.value >= 0 ? "+" : ""}₹
+                        {Math.abs(row.value).toLocaleString("en-IN", {
+                          maximumFractionDigits: 0,
+                        })}
+                      </Typography>
+                    </Box>
+                  );
+                })}
+              </Box>
+            </Paper>
+          </Grid>
+
+          {/* Profit insights */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: { xs: 2, sm: 2.5, md: 3 }, height: "100%" }}>
+              <Typography
+                variant={isMobile ? "subtitle1" : "h6"}
+                gutterBottom
+                sx={{
+                  fontWeight: 600,
+                  mb: 2,
+                  fontSize: { xs: "1rem", sm: "1.1rem", md: "1.25rem" },
+                }}
+              >
+                💡 Profit Insights
+              </Typography>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <Box
+                  sx={{
+                    p: 2,
+                    borderRadius: 2,
+                    borderLeft: "4px solid",
+                    borderColor:
+                      profitMetrics.thisMonthProfit >= 0
+                        ? "success.main"
+                        : "error.main",
+                    bgcolor:
+                      profitMetrics.thisMonthProfit >= 0
+                        ? "success.50"
+                        : "error.50",
+                  }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      fontWeight: 700,
+                      mb: 0.5,
+                      color:
+                        profitMetrics.thisMonthProfit >= 0
+                          ? "success.dark"
+                          : "error.dark",
+                    }}
+                  >
+                    {profitMetrics.thisMonthProfit >= 0
+                      ? "✅ Profitable Month"
+                      : "⚠️ Loss-Making Month"}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {profitMetrics.thisMonthProfit >= 0
+                      ? `This month you're earning ₹${profitMetrics.thisMonthProfit.toLocaleString("en-IN", { maximumFractionDigits: 0 })} over expenses — a ${profitMetrics.profitMarginMonth}% profit margin.`
+                      : `Expenses exceed revenue by ₹${Math.abs(profitMetrics.thisMonthProfit).toLocaleString("en-IN", { maximumFractionDigits: 0 })} this month. You need ₹${profitMetrics.thisMonthTotalExpense.toLocaleString("en-IN", { maximumFractionDigits: 0 })} in revenue to break even (₹${profitMetrics.monthlyExpense.toLocaleString("en-IN", { maximumFractionDigits: 0 })} recurring${profitMetrics.oneTimeExpenseMonth > 0 ? ` + ₹${profitMetrics.oneTimeExpenseMonth.toLocaleString("en-IN", { maximumFractionDigits: 0 })} one-time` : ""}).`}
+                  </Typography>
+                </Box>
+
+                <Box
+                  sx={{
+                    p: 2,
+                    borderRadius: 2,
+                    borderLeft: "4px solid",
+                    borderColor:
+                      profitMetrics.thisYearProfit >= 0
+                        ? "primary.main"
+                        : "error.main",
+                    bgcolor:
+                      profitMetrics.thisYearProfit >= 0
+                        ? "primary.50"
+                        : "error.50",
+                  }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      fontWeight: 700,
+                      mb: 0.5,
+                      color:
+                        profitMetrics.thisYearProfit >= 0
+                          ? "primary.dark"
+                          : "error.dark",
+                    }}
+                  >
+                    {profitMetrics.thisYearProfit >= 0
+                      ? "📈 Positive Annual Outlook"
+                      : "📉 Annual Losses"}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {profitMetrics.thisYearProfit >= 0
+                      ? `Estimated annual profit is ₹${profitMetrics.thisYearProfit.toLocaleString("en-IN", { maximumFractionDigits: 0 })} (${profitMetrics.profitMarginYear}% margin) based on this year's revenue vs monthly expenses annualised.`
+                      : `Annual expenses (₹${profitMetrics.yearlyExpense.toLocaleString("en-IN", { maximumFractionDigits: 0 })}) outpace this year's revenue (₹${revenueMetrics.thisYear.toLocaleString("en-IN", { maximumFractionDigits: 0 })}). You need ${Math.ceil(profitMetrics.monthlyExpense / (revenueMetrics.thisYear / 12 || 1))} more bookings to break even.`}
+                  </Typography>
+                </Box>
+
+                <Box
+                  sx={{
+                    p: 2,
+                    borderRadius: 2,
+                    borderLeft: "4px solid #f59e0b",
+                    bgcolor: "warning.50",
+                  }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ fontWeight: 700, mb: 0.5, color: "warning.dark" }}
+                  >
+                    🎯 Break-even Target
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    You need{" "}
+                    <strong>
+                      ₹
+                      {profitMetrics.thisMonthTotalExpense.toLocaleString(
+                        "en-IN",
+                        { maximumFractionDigits: 0 },
+                      )}
+                    </strong>{" "}
+                    in monthly revenue to break even (₹
+                    {profitMetrics.monthlyExpense.toLocaleString("en-IN", {
+                      maximumFractionDigits: 0,
+                    })}{" "}
+                    recurring
+                    {profitMetrics.oneTimeExpenseMonth > 0
+                      ? ` + ₹${profitMetrics.oneTimeExpenseMonth.toLocaleString("en-IN", { maximumFractionDigits: 0 })} one-time`
+                      : ""}
+                    ). Current average booking value of{" "}
+                    <strong>
+                      ₹
+                      {bookingsData?.count > 0
+                        ? Math.round(
+                            revenueMetrics.total / bookingsData.count,
+                          ).toLocaleString("en-IN")
+                        : 0}
+                    </strong>{" "}
+                    means you need approximately{" "}
+                    <strong>
+                      {bookingsData?.count > 0 && revenueMetrics.total > 0
+                        ? Math.ceil(
+                            profitMetrics.thisMonthTotalExpense /
+                              (revenueMetrics.total / bookingsData.count),
+                          )
+                        : "—"}
+                    </strong>{" "}
+                    bookings per month to cover costs.
+                  </Typography>
+                </Box>
+
+                {profitMetrics.monthlyTrend.length > 0 &&
+                  (() => {
+                    const profitable = profitMetrics.monthlyTrend.filter(
+                      (m) => m.profit > 0,
+                    ).length;
+                    return (
+                      <Box
+                        sx={{
+                          p: 2,
+                          borderRadius: 2,
+                          borderLeft: "4px solid #8b5cf6",
+                          bgcolor: "primary.50",
+                        }}
+                      >
+                        <Typography
+                          variant="subtitle2"
+                          sx={{
+                            fontWeight: 700,
+                            mb: 0.5,
+                            color: "primary.dark",
+                          }}
+                        >
+                          📅 Profitable Months (Last 12)
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {profitable} out of 12 months were profitable.{" "}
+                          {profitable >= 8
+                            ? "Strong consistent performance!"
+                            : profitable >= 4
+                              ? "Mixed results — focus on low-revenue months."
+                              : "Needs attention — review expense structure or boost bookings."}
+                        </Typography>
+                      </Box>
+                    );
+                  })()}
+              </Box>
             </Paper>
           </Grid>
         </Grid>

@@ -87,7 +87,7 @@ export const useBooking = (id) => {
     queryKey: ["booking", id],
     queryFn: () => bookingService.getById(id),
     enabled: !!id,
-    staleTime: 3 * 60 * 1000, // 3 minutes
+    staleTime: 0, // Always consider stale for immediate refetch
     gcTime: 10 * 60 * 1000, // 10 minutes cache
   });
 };
@@ -108,10 +108,15 @@ export const useUpdateBooking = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }) => bookingService.update(id, data),
-    onSuccess: (_, variables) => {
-      // Force immediate refetch of active queries
-      queryClient.refetchQueries({ queryKey: ["bookings"] });
-      queryClient.refetchQueries({ queryKey: ["booking", variables.id] });
+    onSuccess: (response, variables) => {
+      // Update the cache immediately with the response
+      if (response?.data) {
+        queryClient.setQueryData(["booking", variables.id], response);
+      }
+
+      // Also invalidate to trigger refetch in other components
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking", variables.id] });
     },
   });
 };
@@ -120,10 +125,15 @@ export const useUpdateBookingStatus = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, status }) => bookingService.updateStatus(id, status),
-    onSuccess: (_, variables) => {
-      // Force immediate refetch of active queries
-      queryClient.refetchQueries({ queryKey: ["bookings"] });
-      queryClient.refetchQueries({ queryKey: ["booking", variables.id] });
+    onSuccess: (response, variables) => {
+      // Update the cache immediately with the response
+      if (response?.data) {
+        queryClient.setQueryData(["booking", variables.id], response);
+      }
+
+      // Also invalidate to trigger refetch in other components
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking", variables.id] });
     },
   });
 };
@@ -131,11 +141,17 @@ export const useUpdateBookingStatus = () => {
 export const useRecordBookingPayment = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, amount }) => bookingService.recordPayment(id, amount),
-    onSuccess: (_, variables) => {
-      // Force immediate refetch of active queries
-      queryClient.refetchQueries({ queryKey: ["bookings"] });
-      queryClient.refetchQueries({ queryKey: ["booking", variables.id] });
+    mutationFn: ({ id, ...paymentData }) =>
+      bookingService.recordPayment(id, paymentData),
+    onSuccess: (response, variables) => {
+      // Update the cache immediately with the response
+      if (response?.data) {
+        queryClient.setQueryData(["booking", variables.id], response);
+      }
+
+      // Also invalidate to trigger refetch in other components
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking", variables.id] });
     },
   });
 };

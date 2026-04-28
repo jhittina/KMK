@@ -3,7 +3,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Loading from "./Common/Loading";
 
-const ProtectedRoute = ({ children, adminOnly = false }) => {
+const RoleBasedRedirect = () => {
   const { user, loading, isAdmin } = useAuth();
 
   if (loading) {
@@ -14,11 +14,12 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (adminOnly && !isAdmin()) {
+  // Redirect based on role
+  if (isAdmin()) {
+    return <Navigate to="/dashboard" replace />;
+  } else {
     return <Navigate to="/workspace/bookings" replace />;
   }
-
-  return children;
 };
 
-export default ProtectedRoute;
+export default RoleBasedRedirect;

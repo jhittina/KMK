@@ -73,6 +73,14 @@ function Customers() {
     setPage(0);
   }, [searchQuery]);
 
+  // Sort customers by latest updated first
+  const sortedCustomers = React.useMemo(() => {
+    if (!data?.data) return [];
+    return [...data.data].sort(
+      (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt),
+    );
+  }, [data?.data]);
+
   const handleOpen = (customer = null) => {
     if (customer) {
       setEditingCustomer(customer);
@@ -249,7 +257,7 @@ function Customers() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {data?.data
+            {sortedCustomers
               ?.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
               .map((customer) => (
                 <TableRow key={customer._id} hover>
@@ -314,7 +322,7 @@ function Customers() {
 
       <TablePagination
         component="div"
-        count={data?.data?.length || 0}
+        count={sortedCustomers?.length || 0}
         page={page}
         onPageChange={(event, newPage) => setPage(newPage)}
         rowsPerPage={rowsPerPage}

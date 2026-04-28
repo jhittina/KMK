@@ -122,20 +122,21 @@ function AlertDialog({
           >
             {message}
           </DialogContentText>
-          {details && (
-            <Box
-              sx={{
-                bgcolor: "grey.50",
-                p: 2,
-                borderRadius: 1,
-                border: "1px solid",
-                borderColor: "grey.200",
-                width: "100%",
-              }}
-            >
-              {details}
-            </Box>
-          )}
+          {details &&
+            (typeof details !== "string" || details.trim() !== "") && (
+              <Box
+                sx={{
+                  bgcolor: "grey.50",
+                  p: 2,
+                  borderRadius: 1,
+                  border: "1px solid",
+                  borderColor: "grey.200",
+                  width: "100%",
+                }}
+              >
+                {details}
+              </Box>
+            )}
         </Box>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2, justifyContent: "center", gap: 1 }}>

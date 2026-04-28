@@ -100,6 +100,11 @@ const bookingSchema = new mongoose.Schema(
         required: true,
         default: 0,
       },
+      finalPrice: {
+        type: Number,
+        default: null,
+        min: [0, "Final price cannot be negative"],
+      },
       initialPayment: {
         type: Number,
         default: 0,
@@ -110,6 +115,30 @@ const bookingSchema = new mongoose.Schema(
         default: 0,
       },
     },
+    paymentHistory: [
+      {
+        amount: {
+          type: Number,
+          required: true,
+          min: [0, "Payment amount cannot be negative"],
+        },
+        paymentDate: {
+          type: Date,
+          default: Date.now,
+        },
+        paymentMethod: {
+          type: String,
+          enum: ["cash", "card", "upi", "bank_transfer", "cheque", "other"],
+          default: "cash",
+        },
+        transactionId: String,
+        notes: String,
+        recordedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+      },
+    ],
     status: {
       type: String,
       enum: ["draft", "confirmed", "cancelled", "completed"],
@@ -124,13 +153,18 @@ const bookingSchema = new mongoose.Schema(
 
 // Calculate pending payment before saving
 bookingSchema.pre("save", function (next) {
-  if (
-    this.isModified("pricing.totalAmount") ||
-    this.isModified("pricing.initialPayment")
-  ) {
-    this.pricing.pendingPayment =
-      this.pricing.totalAmount - (this.pricing.initialPayment || 0);
-  }
+  // Calculate total paid from payment history
+  const totalPaid = this.paymentHistory.reduce(
+    (sum, payment) => sum + (payment.amount || 0),
+    0,
+  );
+
+  // Use finalPrice if set, otherwise use totalAmount
+  const amountToPay = this.pricing.finalPrice || this.pricing.totalAmount;
+
+  this.pricing.initialPayment = totalPaid;
+  this.pricing.pendingPayment = Math.max(0, amountToPay - totalPaid);
+
   next();
 });
 
@@ -158,16 +192,24 @@ bookingSchema.pre("save", async function (next) {
 });
 
 // Method to record a payment
-bookingSchema.methods.recordPayment = function (paymentAmount) {
-  this.pricing.initialPayment =
-    (this.pricing.initialPayment || 0) + paymentAmount;
-  this.pricing.pendingPayment =
-    this.pricing.totalAmount - this.pricing.initialPayment;
+bookingSchema.methods.recordPayment = function (
+  paymentAmount,
+  paymentMethod = "cash",
+  transactionId = "",
+  notes = "",
+  recordedBy = null,
+) {
+  // Add payment to history
+  this.paymentHistory.push({
+    amount: paymentAmount,
+    paymentDate: new Date(),
+    paymentMethod,
+    transactionId,
+    notes,
+    recordedBy,
+  });
 
-  if (this.pricing.pendingPayment <= 0) {
-    this.pricing.pendingPayment = 0;
-  }
-
+  // The pre-save hook will automatically calculate total paid and pending
   return this.save();
 };
 

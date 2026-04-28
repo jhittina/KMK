@@ -49,8 +49,9 @@ import {
 import { useAlert } from "../../hooks/useAlert";
 import AlertDialog from "../../components/Common/AlertDialog";
 import Loading from "../../components/Common/Loading";
+import DatePickerField from "../../components/Common/DatePickerField";
 
-const Maintenance = () => {
+const Expenses = () => {
   const [selectedTab, setSelectedTab] = useState(0); // 0: Monthly, 1: One-time
   const [openDialog, setOpenDialog] = useState(false);
   const [openPaymentDialog, setOpenPaymentDialog] = useState(false);
@@ -328,7 +329,7 @@ const Maintenance = () => {
         }}
       >
         <Typography variant="h4" fontWeight="bold">
-          💰 Maintenance Management
+          💰 Expenses Management
         </Typography>
         <Button
           variant="contained"
@@ -438,7 +439,8 @@ const Maintenance = () => {
               >
                 <MenuItem value="">All Categories</MenuItem>
                 <MenuItem value="salary">Salary</MenuItem>
-                <MenuItem value="maintenance">Maintenance</MenuItem>
+                <MenuItem value="expenses">Expenses</MenuItem>
+                <MenuItem value="new_inventory">New Inventory</MenuItem>
                 <MenuItem value="investment">Investment</MenuItem>
                 <MenuItem value="utilities">Utilities</MenuItem>
                 <MenuItem value="rent">Rent</MenuItem>
@@ -670,6 +672,8 @@ const Maintenance = () => {
                   required
                 >
                   <MenuItem value="salary">Salary</MenuItem>
+                  <MenuItem value="expenses">Expenses</MenuItem>
+                  <MenuItem value="new_inventory">New Inventory</MenuItem>
                   <MenuItem value="maintenance">Maintenance</MenuItem>
                   <MenuItem value="investment">Investment</MenuItem>
                   <MenuItem value="utilities">Utilities</MenuItem>
@@ -733,28 +737,25 @@ const Maintenance = () => {
               )}
 
               <Grid item xs={12} sm={6}>
-                <TextField
+                <DatePickerField
                   fullWidth
                   label="Start Date"
-                  name="startDate"
-                  type="date"
                   value={formData.startDate}
-                  onChange={handleChange}
+                  onChange={(val) =>
+                    setFormData({ ...formData, startDate: val })
+                  }
                   required
-                  InputLabelProps={{ shrink: true }}
                 />
               </Grid>
 
               {formData.type === "monthly" && (
                 <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
+                  <DatePickerField
                     label="End Date (Optional)"
-                    name="endDate"
-                    type="date"
                     value={formData.endDate}
-                    onChange={handleChange}
-                    InputLabelProps={{ shrink: true }}
+                    onChange={(val) =>
+                      setFormData({ ...formData, endDate: val })
+                    }
                     helperText="Leave empty for ongoing"
                   />
                 </Grid>
@@ -917,4 +918,4 @@ const Maintenance = () => {
   );
 };
 
-export default Maintenance;
+export default Expenses;

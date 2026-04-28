@@ -21,11 +21,14 @@ import {
   useTheme,
   useMediaQuery,
   TablePagination,
+  TextField,
+  InputAdornment,
 } from "@mui/material";
 import {
   Add as AddIcon,
   Visibility as ViewIcon,
   Delete as DeleteIcon,
+  Search as SearchIcon,
 } from "@mui/icons-material";
 import { useBookings, useDeleteBooking } from "../../hooks/useWorkspace";
 import Loading from "../../components/Common/Loading";
@@ -45,6 +48,7 @@ function Bookings() {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const [statusFilter, setStatusFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const { alertState, showConfirm, showError, showSuccess, hideAlert } =
@@ -58,7 +62,31 @@ function Bookings() {
   // Reset page when filter changes
   React.useEffect(() => {
     setPage(0);
-  }, [statusFilter]);
+  }, [statusFilter, searchQuery]);
+
+  // Filter and sort bookings
+  const filteredBookings = React.useMemo(() => {
+    if (!data?.data) return [];
+
+    let filtered = [...data.data];
+
+    // Sort by latest updated first (updatedAt descending)
+    filtered.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+    // Apply search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (booking) =>
+          booking.bookingNumber?.toLowerCase().includes(query) ||
+          booking.customer?.name?.toLowerCase().includes(query) ||
+          booking.customer?.phone?.includes(query) ||
+          booking.eventDetails?.venue?.toLowerCase().includes(query),
+      );
+    }
+
+    return filtered;
+  }, [data?.data, searchQuery]);
 
   const handleDeleteClick = (booking) => {
     const details = (
@@ -127,6 +155,22 @@ function Bookings() {
 
       <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} sm={6} md={4}>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search by booking #, customer, phone, venue..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Grid>
           <Grid item xs={12} sm={6} md={4}>
             <FormControl fullWidth size="small">
               <InputLabel>Filter by Status</InputLabel>
@@ -204,7 +248,7 @@ function Bookings() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {data?.data
+            {filteredBookings
               ?.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
               .map((booking) => (
                 <TableRow key={booking._id} hover>
@@ -310,7 +354,7 @@ function Bookings() {
 
       <TablePagination
         component="div"
-        count={data?.data?.length || 0}
+        count={filteredBookings?.length || 0}
         page={page}
         onPageChange={(event, newPage) => setPage(newPage)}
         rowsPerPage={rowsPerPage}
@@ -321,19 +365,23 @@ function Bookings() {
         rowsPerPageOptions={[5, 10, 25, 50]}
       />
 
-      {data?.data?.length === 0 && (
+      {filteredBookings?.length === 0 && (
         <Box sx={{ textAlign: "center", py: 8 }}>
           <Typography variant="h6" color="text.secondary">
-            No bookings found
+            {searchQuery || statusFilter
+              ? "No bookings match your search"
+              : "No bookings found"}
           </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => navigate("/workspace/bookings/new")}
-            sx={{ mt: 2 }}
-          >
-            Create Your First Booking
-          </Button>
+          {!searchQuery && !statusFilter && (
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => navigate("/workspace/bookings/new")}
+              sx={{ mt: 2 }}
+            >
+              Create Your First Booking
+            </Button>
+          )}
         </Box>
       )}
 

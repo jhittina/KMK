@@ -87,6 +87,14 @@ function Items() {
     setPage(0);
   }, [searchQuery, categoryFilter, subcategoryFilter]);
 
+  // Sort items by latest updated first
+  const sortedItems = React.useMemo(() => {
+    if (!data?.data) return [];
+    return [...data.data].sort(
+      (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt),
+    );
+  }, [data?.data]);
+
   const handleOpen = (item = null) => {
     if (item) {
       setEditingItem(item);
@@ -306,7 +314,7 @@ function Items() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {(data?.data || [])
+            {(sortedItems || [])
               .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
               .map((item) => (
                 <TableRow key={item._id} hover>
@@ -361,7 +369,7 @@ function Items() {
 
       <TablePagination
         component="div"
-        count={data?.data?.length || 0}
+        count={sortedItems?.length || 0}
         page={page}
         onPageChange={(event, newPage) => setPage(newPage)}
         rowsPerPage={rowsPerPage}
@@ -372,7 +380,7 @@ function Items() {
         rowsPerPageOptions={[5, 10, 25, 50]}
       />
 
-      {data?.data?.length === 0 && (
+      {sortedItems?.length === 0 && (
         <Box sx={{ textAlign: "center", py: 8 }}>
           <Typography variant="h6" color="text.secondary">
             {searchQuery || categoryFilter || subcategoryFilter

@@ -35,17 +35,21 @@ import {
   Logout as LogoutIcon,
   Person as PersonIcon,
   AttachMoney as ExpenseIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
 } from "@mui/icons-material";
 import { ColorModeContext } from "../../App";
 import { useAuth } from "../../context/AuthContext";
 
-const drawerWidth = 280;
+const DRAWER_FULL = 260;
+const DRAWER_MINI = 64;
 
 const menuItems = [
   {
     text: "Dashboard",
     icon: <DashboardIcon />,
     path: "/dashboard",
+    adminOnly: true,
   },
   {
     divider: true,
@@ -62,9 +66,9 @@ const menuItems = [
     path: "/config/items",
   },
   {
-    text: "Maintenance",
+    text: "Expenses",
     icon: <ExpenseIcon />,
-    path: "/config/maintenance",
+    path: "/config/expenses",
   },
   {
     divider: true,
@@ -93,21 +97,19 @@ function Layout({ children }) {
   const { user, logout, isAdmin } = useAuth();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
 
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
+  const drawerWidth = collapsed ? DRAWER_MINI : DRAWER_FULL;
+  const isDark = theme.palette.mode === "dark";
 
-  const handleUserMenuOpen = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
+  const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
+  const handleCollapseToggle = () => setCollapsed((c) => !c);
 
-  const handleUserMenuClose = () => {
-    setAnchorEl(null);
-  };
+  const handleUserMenuOpen = (e) => setAnchorEl(e.currentTarget);
+  const handleUserMenuClose = () => setAnchorEl(null);
 
   const handleLogout = () => {
     handleUserMenuClose();
@@ -117,45 +119,44 @@ function Layout({ children }) {
 
   const handleNavigation = (path) => {
     navigate(path);
-    if (isMobile) {
-      setMobileOpen(false);
-    }
+    if (isMobile) setMobileOpen(false);
   };
 
-  // Filter menu items based on user role
   const filteredMenuItems = menuItems.filter((item) => {
-    // Show all items to admin
+    if (item.adminOnly && !isAdmin()) return false;
     if (isAdmin()) return true;
-
-    // Hide Self Service items for staff
-    if (item.title === "Self Service" || item.path?.startsWith("/config")) {
+    if (item.title === "Self Service" || item.path?.startsWith("/config"))
       return false;
-    }
-
     return true;
   });
 
-  const drawer = (
+  // Shared drawer content — accepts collapsed prop (always false on mobile)
+  const DrawerContent = ({ mini = false }) => (
     <Box
       sx={{
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        background:
-          theme.palette.mode === "dark"
-            ? "linear-gradient(180deg, #1e1b4b 0%, #0f172a 100%)"
-            : "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)",
+        background: isDark
+          ? "linear-gradient(180deg, #1e1b4b 0%, #0f172a 100%)"
+          : "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)",
+        overflow: "hidden",
       }}
     >
+      {/* Header */}
       <Box
         sx={{
-          p: 3,
-          background:
-            theme.palette.mode === "dark"
-              ? "linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #ec4899 100%)"
-              : "linear-gradient(135deg, #8b5cf6 0%, #a78bfa 50%, #c4b5fd 100%)",
+          background: isDark
+            ? "linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #ec4899 100%)"
+            : "linear-gradient(135deg, #8b5cf6 0%, #a78bfa 50%, #c4b5fd 100%)",
           position: "relative",
           overflow: "hidden",
+          py: mini ? 1.5 : 2.5,
+          px: mini ? 0 : 3,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: mini ? "center" : "flex-start",
+          gap: mini ? 0 : 1.5,
           "&::before": {
             content: '""',
             position: "absolute",
@@ -169,72 +170,68 @@ function Layout({ children }) {
           },
         }}
       >
-        <Box sx={{ textAlign: "center" }}>
-          <Typography
-            sx={{
-              fontSize: "3rem",
-              filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.3))",
-              lineHeight: 1,
-            }}
-          >
-            💍
-          </Typography>
-        </Box>
         <Typography
-          variant="caption"
           sx={{
-            color: "rgba(255,255,255,0.9)",
-            fontWeight: 500,
+            fontSize: mini ? "1.6rem" : "2.2rem",
+            lineHeight: 1,
+            filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.3))",
             position: "relative",
             zIndex: 1,
-            mt: 1.5,
-            display: "block",
-            textAlign: "center",
           }}
         >
-          KMK Hall & Banquets
+          💍
         </Typography>
-        <Typography
-          variant="caption"
-          sx={{
-            color: "rgba(255,255,255,0.9)",
-            fontWeight: 500,
-            position: "relative",
-            zIndex: 1,
-            mt: 0.5,
-            display: "block",
-            textAlign: "center",
-            fontSize: "0.7rem",
-          }}
-        >
-          Premium Event Management
-        </Typography>
+        {!mini && (
+          <Box sx={{ position: "relative", zIndex: 1 }}>
+            <Typography
+              variant="body2"
+              sx={{ color: "white", fontWeight: 700, lineHeight: 1.2 }}
+            >
+              KMK Hall & Banquets
+            </Typography>
+            <Typography
+              variant="caption"
+              sx={{ color: "rgba(255,255,255,0.8)", fontSize: "0.68rem" }}
+            >
+              Premium Event Management
+            </Typography>
+          </Box>
+        )}
       </Box>
-      <List sx={{ px: 2, py: 2, flexGrow: 1 }}>
+
+      {/* Nav List */}
+      <List
+        sx={{
+          px: mini ? 0.5 : 1.5,
+          py: 1.5,
+          flexGrow: 1,
+          overflowY: "auto",
+          overflowX: "hidden",
+        }}
+      >
         {filteredMenuItems.map((item, index) => {
           if (item.divider) {
             return (
               <Box key={index}>
                 <Divider
                   sx={{
-                    my: 2,
-                    borderColor:
-                      theme.palette.mode === "dark"
-                        ? "rgba(139, 92, 246, 0.2)"
-                        : "rgba(139, 92, 246, 0.1)",
+                    my: 1.5,
+                    borderColor: isDark
+                      ? "rgba(139,92,246,0.2)"
+                      : "rgba(139,92,246,0.12)",
                   }}
                 />
-                {item.title && (
-                  <Box sx={{ px: 2, mb: 1 }}>
+                {item.title && !mini && (
+                  <Box sx={{ px: 2, mb: 0.5 }}>
                     <Typography
                       variant="overline"
                       sx={{
-                        color:
-                          theme.palette.mode === "dark"
-                            ? "rgba(167, 139, 250, 0.8)"
-                            : "rgba(124, 58, 237, 0.7)",
+                        color: isDark
+                          ? "rgba(167,139,250,0.8)"
+                          : "rgba(124,58,237,0.7)",
                         fontWeight: 700,
-                        fontSize: "0.75rem",
+                        fontSize: "0.7rem",
+                        letterSpacing: "0.1em",
                       }}
                     >
                       {item.title}
@@ -248,242 +245,215 @@ function Layout({ children }) {
           const isActive = location.pathname === item.path;
 
           return (
-            <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
-              <ListItemButton
-                onClick={() => handleNavigation(item.path)}
-                selected={isActive}
-                sx={{
-                  borderRadius: 2,
-                  py: 1.5,
-                  px: 2,
-                  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                  position: "relative",
-                  overflow: "hidden",
-                  "&::before": {
-                    content: '""',
-                    position: "absolute",
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: "4px",
-                    background: isActive
-                      ? "linear-gradient(180deg, #8b5cf6 0%, #ec4899 100%)"
-                      : "transparent",
-                    borderRadius: "0 4px 4px 0",
-                    transition: "all 0.3s",
-                  },
-                  "&:hover": {
-                    backgroundColor:
-                      theme.palette.mode === "dark"
-                        ? "rgba(139, 92, 246, 0.15)"
-                        : "rgba(139, 92, 246, 0.08)",
-                    transform: "translateX(4px)",
-                    "&::before": {
-                      width: "4px",
-                      background:
-                        "linear-gradient(180deg, #a78bfa 0%, #f472b6 100%)",
-                    },
-                  },
-                  "&.Mui-selected": {
-                    background:
-                      theme.palette.mode === "dark"
-                        ? "linear-gradient(135deg, rgba(124, 58, 237, 0.3) 0%, rgba(236, 72, 153, 0.2) 100%)"
-                        : "linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(236, 72, 153, 0.1) 100%)",
-                    boxShadow:
-                      theme.palette.mode === "dark"
-                        ? "0 4px 12px rgba(139, 92, 246, 0.3), inset 0 1px 0 rgba(255,255,255,0.1)"
-                        : "0 4px 12px rgba(139, 92, 246, 0.2), inset 0 1px 0 rgba(255,255,255,0.5)",
-                    "&:hover": {
-                      background:
-                        theme.palette.mode === "dark"
-                          ? "linear-gradient(135deg, rgba(124, 58, 237, 0.4) 0%, rgba(236, 72, 153, 0.3) 100%)"
-                          : "linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(236, 72, 153, 0.15) 100%)",
-                    },
-                    "& .MuiListItemIcon-root": {
-                      color: theme.palette.primary.main,
-                    },
-                    "& .MuiListItemText-primary": {
-                      fontWeight: 700,
-                      color:
-                        theme.palette.mode === "dark"
-                          ? theme.palette.primary.light
-                          : theme.palette.primary.dark,
-                    },
-                  },
-                }}
-              >
-                <ListItemIcon
+            <ListItem key={item.text} disablePadding sx={{ mb: 0.25 }}>
+              <Tooltip title={mini ? item.text : ""} placement="right" arrow>
+                <ListItemButton
+                  onClick={() => handleNavigation(item.path)}
+                  selected={isActive}
                   sx={{
-                    minWidth: 40,
-                    color: isActive
-                      ? theme.palette.primary.main
-                      : theme.palette.mode === "dark"
-                        ? "rgba(167, 139, 250, 0.7)"
-                        : "rgba(124, 58, 237, 0.6)",
-                    transition: "all 0.3s",
+                    borderRadius: 2,
+                    py: 1.25,
+                    px: mini ? 1.5 : 1.75,
+                    justifyContent: mini ? "center" : "flex-start",
+                    minHeight: 44,
+                    transition: "all 0.25s cubic-bezier(0.4,0,0.2,1)",
+                    position: "relative",
+                    overflow: "hidden",
+                    "&::before": {
+                      content: '""',
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: isActive ? "3px" : "0px",
+                      background:
+                        "linear-gradient(180deg, #8b5cf6 0%, #ec4899 100%)",
+                      borderRadius: "0 4px 4px 0",
+                      transition: "width 0.25s",
+                    },
+                    "&:hover": {
+                      backgroundColor: isDark
+                        ? "rgba(139,92,246,0.15)"
+                        : "rgba(139,92,246,0.08)",
+                      transform: mini ? "none" : "translateX(3px)",
+                      "&::before": {
+                        width: "3px",
+                        background:
+                          "linear-gradient(180deg, #a78bfa 0%, #f472b6 100%)",
+                      },
+                    },
+                    "&.Mui-selected": {
+                      background: isDark
+                        ? "linear-gradient(135deg, rgba(124,58,237,0.3) 0%, rgba(236,72,153,0.2) 100%)"
+                        : "linear-gradient(135deg, rgba(139,92,246,0.15) 0%, rgba(236,72,153,0.1) 100%)",
+                      boxShadow: isDark
+                        ? "0 4px 12px rgba(139,92,246,0.3), inset 0 1px 0 rgba(255,255,255,0.1)"
+                        : "0 4px 12px rgba(139,92,246,0.2), inset 0 1px 0 rgba(255,255,255,0.5)",
+                      "&:hover": {
+                        background: isDark
+                          ? "linear-gradient(135deg, rgba(124,58,237,0.4) 0%, rgba(236,72,153,0.3) 100%)"
+                          : "linear-gradient(135deg, rgba(139,92,246,0.2) 0%, rgba(236,72,153,0.15) 100%)",
+                      },
+                      "& .MuiListItemIcon-root": {
+                        color: theme.palette.primary.main,
+                      },
+                    },
                   }}
                 >
-                  {item.icon}
-                </ListItemIcon>
-                <ListItemText
-                  primary={item.text}
-                  primaryTypographyProps={{
-                    fontWeight: isActive ? 700 : 500,
-                    fontSize: "1rem",
-                    letterSpacing: "-0.01em",
-                    color: isActive
-                      ? theme.palette.mode === "dark"
-                        ? theme.palette.primary.light
-                        : theme.palette.primary.dark
-                      : theme.palette.text.primary,
-                  }}
-                />
-              </ListItemButton>
+                  <ListItemIcon
+                    sx={{
+                      minWidth: mini ? 0 : 38,
+                      mr: mini ? 0 : 0.5,
+                      color: isActive
+                        ? theme.palette.primary.main
+                        : isDark
+                          ? "rgba(167,139,250,0.7)"
+                          : "rgba(124,58,237,0.6)",
+                      transition: "color 0.25s",
+                      "& svg": { fontSize: "1.3rem" },
+                    }}
+                  >
+                    {item.icon}
+                  </ListItemIcon>
+                  {!mini && (
+                    <ListItemText
+                      primary={item.text}
+                      primaryTypographyProps={{
+                        fontWeight: isActive ? 700 : 500,
+                        fontSize: "0.9rem",
+                        noWrap: true,
+                        color: isActive
+                          ? isDark
+                            ? theme.palette.primary.light
+                            : theme.palette.primary.dark
+                          : theme.palette.text.primary,
+                      }}
+                    />
+                  )}
+                </ListItemButton>
+              </Tooltip>
             </ListItem>
           );
         })}
       </List>
-      <Box
-        sx={{
-          p: 2,
-          borderTop: `1px solid ${
-            theme.palette.mode === "dark"
-              ? "rgba(139, 92, 246, 0.2)"
-              : "rgba(139, 92, 246, 0.1)"
-          }`,
-          background:
-            theme.palette.mode === "dark"
-              ? "rgba(30, 27, 75, 0.5)"
-              : "rgba(248, 250, 252, 0.8)",
-        }}
-      >
-        <Typography
-          variant="caption"
+
+      {/* Footer */}
+      {!mini && (
+        <Box
           sx={{
-            color: theme.palette.text.secondary,
-            display: "block",
-            textAlign: "center",
-            fontWeight: 500,
+            p: 1.5,
+            borderTop: `1px solid ${isDark ? "rgba(139,92,246,0.2)" : "rgba(139,92,246,0.1)"}`,
           }}
         >
-          © 2026 KMK Hall & Banquets
-        </Typography>
-      </Box>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              display: "block",
+              textAlign: "center",
+              fontWeight: 500,
+              fontSize: "0.68rem",
+            }}
+          >
+            © 2026 KMK Hall & Banquets
+          </Typography>
+        </Box>
+      )}
     </Box>
   );
 
   return (
     <Box sx={{ display: "flex" }}>
+      {/* AppBar */}
       <AppBar
         position="fixed"
         elevation={0}
         sx={{
           width: { md: `calc(100% - ${drawerWidth}px)` },
           ml: { md: `${drawerWidth}px` },
-          background:
-            theme.palette.mode === "dark"
-              ? "rgba(30, 27, 75, 0.95)"
-              : "rgba(255, 255, 255, 0.95)",
+          transition: "width 0.3s ease, margin 0.3s ease",
+          background: isDark ? "rgba(30,27,75,0.95)" : "rgba(255,255,255,0.95)",
           backdropFilter: "blur(10px)",
-          borderBottom: `1px solid ${
-            theme.palette.mode === "dark"
-              ? "rgba(139, 92, 246, 0.2)"
-              : "rgba(139, 92, 246, 0.1)"
-          }`,
-          boxShadow:
-            theme.palette.mode === "dark"
-              ? "0 4px 24px rgba(0, 0, 0, 0.2)"
-              : "0 4px 24px rgba(139, 92, 246, 0.05)",
+          borderBottom: `1px solid ${isDark ? "rgba(139,92,246,0.2)" : "rgba(139,92,246,0.1)"}`,
+          boxShadow: isDark
+            ? "0 4px 24px rgba(0,0,0,0.2)"
+            : "0 4px 24px rgba(139,92,246,0.05)",
         }}
       >
         <Toolbar>
+          {/* Mobile hamburger */}
           <IconButton
             color="inherit"
-            aria-label="open drawer"
             edge="start"
             onClick={handleDrawerToggle}
             sx={{
               mr: 2,
               display: { md: "none" },
-              color:
-                theme.palette.mode === "dark"
-                  ? "white"
-                  : theme.palette.primary.main,
+              color: isDark ? "white" : theme.palette.primary.main,
             }}
           >
             <MenuIcon />
           </IconButton>
+
           <Typography
             variant="h6"
             noWrap
-            component="div"
             sx={{
               flexGrow: 1,
               fontWeight: 700,
-              background:
-                theme.palette.mode === "dark"
-                  ? "linear-gradient(135deg, #a78bfa 0%, #f472b6 100%)"
-                  : "linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)",
+              background: isDark
+                ? "linear-gradient(135deg, #a78bfa 0%, #f472b6 100%)"
+                : "linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)",
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
               backgroundClip: "text",
-              fontSize: { xs: "0.95rem", sm: "1.1rem", md: "1.25rem" },
+              fontSize: { xs: "0.95rem", sm: "1.1rem", md: "1.2rem" },
             }}
           >
             {isMobile
               ? "KMK Hall & Banquets"
-              : "KMK Hall & Banquets - Event Management"}
+              : "KMK Hall & Banquets — Event Management"}
           </Typography>
-          <Tooltip
-            title={`Switch to ${theme.palette.mode === "dark" ? "light" : "dark"} mode`}
-          >
+
+          {/* Dark mode toggle */}
+          <Tooltip title={`Switch to ${isDark ? "light" : "dark"} mode`}>
             <IconButton
               onClick={colorMode.toggleColorMode}
               size="medium"
               sx={{
                 mr: 1,
-                color:
-                  theme.palette.mode === "dark"
-                    ? theme.palette.primary.light
-                    : theme.palette.primary.main,
-                backgroundColor:
-                  theme.palette.mode === "dark"
-                    ? "rgba(139, 92, 246, 0.1)"
-                    : "rgba(139, 92, 246, 0.05)",
+                color: isDark
+                  ? theme.palette.primary.light
+                  : theme.palette.primary.main,
+                bgcolor: isDark
+                  ? "rgba(139,92,246,0.1)"
+                  : "rgba(139,92,246,0.05)",
                 "&:hover": {
-                  backgroundColor:
-                    theme.palette.mode === "dark"
-                      ? "rgba(139, 92, 246, 0.2)"
-                      : "rgba(139, 92, 246, 0.1)",
+                  bgcolor: isDark
+                    ? "rgba(139,92,246,0.2)"
+                    : "rgba(139,92,246,0.1)",
                 },
               }}
             >
-              {theme.palette.mode === "dark" ? (
-                <LightModeIcon />
-              ) : (
-                <DarkModeIcon />
-              )}
+              {isDark ? <LightModeIcon /> : <DarkModeIcon />}
             </IconButton>
           </Tooltip>
 
-          {/* User Menu */}
+          {/* User menu */}
           <Tooltip title="Account">
             <IconButton
               onClick={handleUserMenuOpen}
               sx={{
-                color:
-                  theme.palette.mode === "dark"
-                    ? theme.palette.primary.light
-                    : theme.palette.primary.main,
-                backgroundColor:
-                  theme.palette.mode === "dark"
-                    ? "rgba(139, 92, 246, 0.1)"
-                    : "rgba(139, 92, 246, 0.05)",
+                color: isDark
+                  ? theme.palette.primary.light
+                  : theme.palette.primary.main,
+                bgcolor: isDark
+                  ? "rgba(139,92,246,0.1)"
+                  : "rgba(139,92,246,0.05)",
                 "&:hover": {
-                  backgroundColor:
-                    theme.palette.mode === "dark"
-                      ? "rgba(139, 92, 246, 0.2)"
-                      : "rgba(139, 92, 246, 0.1)",
+                  bgcolor: isDark
+                    ? "rgba(139,92,246,0.2)"
+                    : "rgba(139,92,246,0.1)",
                 },
               }}
             >
@@ -495,13 +465,7 @@ function Layout({ children }) {
             anchorEl={anchorEl}
             open={Boolean(anchorEl)}
             onClose={handleUserMenuClose}
-            PaperProps={{
-              sx: {
-                mt: 1,
-                minWidth: 200,
-                borderRadius: 2,
-              },
-            }}
+            PaperProps={{ sx: { mt: 1, minWidth: 200, borderRadius: 2 } }}
           >
             <Box
               sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: "divider" }}
@@ -533,32 +497,34 @@ function Layout({ children }) {
         </Toolbar>
       </AppBar>
 
+      {/* Nav */}
       <Box
         component="nav"
-        sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}
+        sx={{
+          width: { md: drawerWidth },
+          flexShrink: { md: 0 },
+          transition: "width 0.3s ease",
+        }}
       >
         {/* Mobile drawer */}
         <Drawer
           variant="temporary"
           open={mobileOpen}
           onClose={handleDrawerToggle}
-          ModalProps={{
-            keepMounted: true, // Better mobile performance
-          }}
+          ModalProps={{ keepMounted: true }}
           sx={{
             display: { xs: "block", md: "none" },
             "& .MuiDrawer-paper": {
               boxSizing: "border-box",
-              width: drawerWidth,
+              width: DRAWER_FULL,
               borderRight: "none",
-              boxShadow:
-                theme.palette.mode === "dark"
-                  ? "4px 0 24px rgba(0, 0, 0, 0.5)"
-                  : "4px 0 24px rgba(139, 92, 246, 0.1)",
+              boxShadow: isDark
+                ? "4px 0 24px rgba(0,0,0,0.5)"
+                : "4px 0 24px rgba(139,92,246,0.1)",
             },
           }}
         >
-          {drawer}
+          <DrawerContent mini={false} />
         </Drawer>
 
         {/* Desktop drawer */}
@@ -569,23 +535,65 @@ function Layout({ children }) {
             "& .MuiDrawer-paper": {
               boxSizing: "border-box",
               width: drawerWidth,
-              borderRight: `1px solid ${
-                theme.palette.mode === "dark"
-                  ? "rgba(139, 92, 246, 0.2)"
-                  : "rgba(139, 92, 246, 0.1)"
-              }`,
-              boxShadow:
-                theme.palette.mode === "dark"
-                  ? "4px 0 24px rgba(0, 0, 0, 0.3)"
-                  : "4px 0 24px rgba(139, 92, 246, 0.05)",
+              borderRight: `1px solid ${isDark ? "rgba(139,92,246,0.2)" : "rgba(139,92,246,0.1)"}`,
+              boxShadow: isDark
+                ? "4px 0 24px rgba(0,0,0,0.3)"
+                : "4px 0 24px rgba(139,92,246,0.05)",
+              overflowX: "hidden",
+              transition: "width 0.3s cubic-bezier(0.4,0,0.2,1)",
             },
           }}
           open
         >
-          {drawer}
+          <DrawerContent mini={collapsed} />
+
+          {/* Collapse toggle button */}
+          <Box
+            sx={{
+              position: "absolute",
+              bottom: 56,
+              right: collapsed ? "50%" : 12,
+              transform: collapsed ? "translateX(50%)" : "none",
+              transition: "all 0.3s ease",
+              zIndex: 10,
+            }}
+          >
+            <Tooltip
+              title={collapsed ? "Expand menu" : "Collapse menu"}
+              placement="right"
+            >
+              <IconButton
+                onClick={handleCollapseToggle}
+                size="small"
+                sx={{
+                  bgcolor: isDark
+                    ? "rgba(139,92,246,0.15)"
+                    : "rgba(139,92,246,0.1)",
+                  border: `1px solid ${isDark ? "rgba(139,92,246,0.3)" : "rgba(139,92,246,0.25)"}`,
+                  color: isDark ? "#a78bfa" : "#7c3aed",
+                  width: 28,
+                  height: 28,
+                  "&:hover": {
+                    bgcolor: isDark
+                      ? "rgba(139,92,246,0.3)"
+                      : "rgba(139,92,246,0.2)",
+                    transform: "scale(1.1)",
+                  },
+                  transition: "all 0.2s ease",
+                }}
+              >
+                {collapsed ? (
+                  <ChevronRightIcon sx={{ fontSize: "1rem" }} />
+                ) : (
+                  <ChevronLeftIcon sx={{ fontSize: "1rem" }} />
+                )}
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Drawer>
       </Box>
 
+      {/* Main content */}
       <Box
         component="main"
         sx={{
@@ -593,10 +601,10 @@ function Layout({ children }) {
           p: { xs: 2, sm: 2.5, md: 3 },
           width: { md: `calc(100% - ${drawerWidth}px)` },
           minHeight: "100vh",
-          backgroundColor:
-            theme.palette.mode === "dark"
-              ? theme.palette.background.default
-              : "#f8fafc",
+          transition: "width 0.3s ease",
+          backgroundColor: isDark
+            ? theme.palette.background.default
+            : "#f8fafc",
         }}
       >
         <Toolbar />

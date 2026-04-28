@@ -146,20 +146,27 @@ function Categories() {
     }
   };
 
+  // Filter and sort categories based on search
+  const filteredCategories = React.useMemo(() => {
+    let filtered =
+      data?.data?.filter((category) => {
+        const matchesSearch = searchQuery
+          ? category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            category.description
+              ?.toLowerCase()
+              .includes(searchQuery.toLowerCase())
+          : true;
+        return matchesSearch;
+      }) || [];
+
+    // Sort by latest updated first (updatedAt descending)
+    return filtered.sort(
+      (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt),
+    );
+  }, [data?.data, searchQuery]);
+
   if (isLoading) return <Loading />;
   if (error) return <ErrorMessage error={error} onRetry={refetch} />;
-
-  // Filter categories based on search
-  const filteredCategories =
-    data?.data?.filter((category) => {
-      const matchesSearch = searchQuery
-        ? category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          category.description
-            ?.toLowerCase()
-            .includes(searchQuery.toLowerCase())
-        : true;
-      return matchesSearch;
-    }) || [];
 
   return (
     <Box>
